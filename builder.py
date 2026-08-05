@@ -5,21 +5,20 @@ CAMILO BUILDER
 import argparse
 from pathlib import Path
 
-from builders.project_builder import ProjectBuilder
+from builders.project_builder import InvalidProjectName, ProjectBuilder
 
 ROOT = Path(__file__).resolve().parent
 
 
-def status():
+def status() -> None:
     print("=" * 60)
     print("CAMILO BUILDER")
     print("=" * 60)
     print("Estado: Operativo")
 
 
-def create_project(name):
-
-    output = ROOT / "output"
+def create_project(name: str, output: Path | None = None) -> Path:
+    output = output or ROOT / "output"
 
     builder = ProjectBuilder(output)
 
@@ -30,10 +29,12 @@ def create_project(name):
     print(project)
     print()
 
+    return project
+
 
 def main():
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(prog="builder", description="Constructor de Camilo OS")
 
     sub = parser.add_subparsers(dest="cmd")
 
@@ -41,6 +42,11 @@ def main():
 
     p = sub.add_parser("create-project")
     p.add_argument("name")
+    p.add_argument(
+        "--output",
+        type=Path,
+        help="Directorio donde se creará el proyecto (por defecto: ./output)",
+    )
 
     args = parser.parse_args()
 
@@ -48,7 +54,10 @@ def main():
         status()
 
     elif args.cmd == "create-project":
-        create_project(args.name)
+        try:
+            create_project(args.name, args.output)
+        except InvalidProjectName as error:
+            parser.error(str(error))
 
     else:
         parser.print_help()
