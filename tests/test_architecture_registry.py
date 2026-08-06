@@ -320,7 +320,10 @@ class ArchitectureRegistryTests(unittest.TestCase):
             "architecture-unknown-property": ("schema", "additionalProperties"),
         }
         invalid_dir = V2_FIXTURE_ROOT / "invalid"
-        self.assertEqual(sorted(path.stem for path in invalid_dir.glob("*.json")), sorted(cases))
+        self.assertEqual(
+            sorted(path.stem for path in invalid_dir.glob("architecture-*.json")),
+            sorted(cases),
+        )
         for name, (validation_type, expected) in cases.items():
             fixture = load_json(invalid_dir / f"{name}.json")
             schema_errors = stable_schema_errors(make_validator(self.v2_schema), fixture)

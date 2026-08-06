@@ -1,0 +1,55 @@
+{
+  "schema_version": 2,
+  "id": "WORK-009",
+  "record_version": "1.0.0",
+  "title": "Establish CamiloBuilder Constitution",
+  "status": "in_progress",
+  "created_at": "2026-08-06T17:56:11+02:00",
+  "contract_change": "creates",
+  "constitution_version": "1.0.0",
+  "affected_component_ids": [
+    "governance.architecture-registry",
+    "governance.constitution",
+    "governance.schemas"
+  ],
+  "affected_contract_ids": [
+    "contract.governance-schema"
+  ],
+  "affected_capability_ids": [],
+  "dependency_ids": [],
+  "implementation_commit_ids": [
+    "ac2f00def074e5bee7c50753e9bc9af82b655bd2",
+    "c7031e5d858ab7130981287e017784727415a12a",
+    "90cf95cb6062a4d7213c60380c23f15163fdc43c"
+  ],
+  "tests": [
+    {
+      "id": "test.compileall",
+      "command": "python3 -m compileall -q builder.py builder_cli.py builders template_system tests",
+      "result": "passed"
+    },
+    {
+      "id": "test.diff-check",
+      "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "id": "test.unit-suite",
+      "command": "python3 -m unittest discover -v",
+      "result": "passed"
+    }
+  ],
+  "risks": [
+    "Architectural checks are intentionally narrower than a complete audit",
+    "Capability references cannot be checked until a capability registry exists",
+    "Contract identifiers do not yet have independent contract records"
+  ],
+  "reversal": "Revert WORK-009 implementation commits in reverse chronological order.",
+  "status_history": [
+    {
+      "from": "approved",
+      "to": "in_progress",
+      "at": "2026-08-06T17:56:11+02:00"
+    }
+  ]
+}

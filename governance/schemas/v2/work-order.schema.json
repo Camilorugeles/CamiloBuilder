@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://camilobuilder.dev/governance/schemas/v2/work-order.schema.json",
+  "title": "CamiloBuilder traceable Work Order schema v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "record_version",
+    "title",
+    "status",
+    "created_at",
+    "contract_change",
+    "constitution_version",
+    "affected_component_ids",
+    "affected_contract_ids",
+    "affected_capability_ids",
+    "dependency_ids",
+    "tests",
+    "risks",
+    "reversal",
+    "status_history"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "id": { "$ref": "#/$defs/workOrderId" },
+    "record_version": { "$ref": "#/$defs/semver" },
+    "title": { "type": "string", "minLength": 1 },
+    "status": { "$ref": "#/$defs/status" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "contract_change": { "enum": ["creates", "modifies", "deprecates", "removes", "none"] },
+    "constitution_version": { "const": "1.0.0" },
+    "affected_component_ids": { "$ref": "#/$defs/ids" },
+    "affected_contract_ids": { "$ref": "#/$defs/ids" },
+    "affected_capability_ids": { "$ref": "#/$defs/ids" },
+    "dependency_ids": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/workOrderId" },
+      "uniqueItems": true
+    },
+    "implementation_commit_ids": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/commit" },
+      "uniqueItems": true
+    },
+    "registry_closure_commit_id": { "$ref": "#/$defs/commit" },
+    "tests": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/test" },
+      "uniqueItems": true
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "reversal": { "type": "string", "minLength": 1 },
+    "status_history": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/transition" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "contract_change": { "const": "none" } }, "required": ["contract_change"] },
+      "then": { "properties": { "affected_contract_ids": { "maxItems": 0 } } },
+      "else": { "properties": { "affected_contract_ids": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["completed", "published"] } }, "required": ["status"] },
+      "then": {
+        "required": ["implementation_commit_ids"],
+        "properties": {
+          "implementation_commit_ids": { "minItems": 1 },
+          "tests": { "minItems": 1 },
+          "status_history": {
+            "minItems": 1,
+            "contains": {
+              "required": ["to"],
+              "properties": { "to": { "const": "completed" } }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "workOrderId": { "type": "string", "pattern": "^WORK-[0-9]{3,}$" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$" },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "ids": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/id" },
+      "uniqueItems": true
+    },
+    "status": {
+      "enum": ["proposed", "approved", "in_progress", "completed", "published", "reverted", "cancelled"]
+    },
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "command", "result"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "command": { "type": "string", "minLength": 1 },
+        "result": { "enum": ["passed", "failed"] }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "at"],
+      "properties": {
+        "from": { "$ref": "#/$defs/status" },
+        "to": { "$ref": "#/$defs/status" },
+        "at": { "type": "string", "format": "date-time" }
+      },
+      "oneOf": [
+        { "properties": { "from": { "const": "proposed" }, "to": { "enum": ["approved", "cancelled"] } } },
+        { "properties": { "from": { "const": "approved" }, "to": { "enum": ["in_progress", "cancelled"] } } },
+        { "properties": { "from": { "const": "in_progress" }, "to": { "enum": ["completed", "cancelled"] } } },
+        { "properties": { "from": { "const": "completed" }, "to": { "enum": ["published", "reverted"] } } },
+        { "properties": { "from": { "const": "published" }, "to": { "const": "reverted" } } }
+      ]
+    }
+  }
+}
