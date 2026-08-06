@@ -1,4 +1,5 @@
 import contextlib
+import inspect
 import subprocess
 import sys
 import tempfile
@@ -15,9 +16,54 @@ from builders.component_builder import (
 from builders.component_catalog import ComponentCatalog, ComponentNotFound
 from builders.department_builder import DepartmentBuilder
 from builders.project_builder import InvalidProjectName, ProjectBuilder
+from builders.templated_component_builder import TemplatedComponentBuilder
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class TemplatedComponentBuilderStructureTests(unittest.TestCase):
+    def test_concrete_builders_share_the_templated_base(self):
+        self.assertTrue(issubclass(AgentBuilder, TemplatedComponentBuilder))
+        self.assertTrue(issubclass(DepartmentBuilder, TemplatedComponentBuilder))
+        self.assertNotIn("__init__", AgentBuilder.__dict__)
+        self.assertNotIn("build", AgentBuilder.__dict__)
+        self.assertNotIn("__init__", DepartmentBuilder.__dict__)
+        self.assertNotIn("build", DepartmentBuilder.__dict__)
+
+    def test_concrete_builders_preserve_the_public_constructor_signature(self):
+        expected_parameters = (
+            "project_dir",
+            "template_dir",
+            "templates_dir",
+            "renderer",
+        )
+
+        for builder_class in (AgentBuilder, DepartmentBuilder):
+            with self.subTest(builder_class=builder_class.__name__):
+                signature = inspect.signature(builder_class)
+                self.assertEqual(tuple(signature.parameters), expected_parameters)
+                self.assertEqual(
+                    signature, inspect.signature(TemplatedComponentBuilder)
+                )
+
+    def test_concrete_builders_declare_their_component_metadata(self):
+        self.assertEqual(
+            (
+                AgentBuilder.component_type,
+                AgentBuilder.component_folder,
+                AgentBuilder.component_label,
+            ),
+            ("agent", "agents", "Agente"),
+        )
+        self.assertEqual(
+            (
+                DepartmentBuilder.component_type,
+                DepartmentBuilder.component_folder,
+                DepartmentBuilder.component_label,
+            ),
+            ("department", "departments", "Departamento"),
+        )
 
 
 class ProjectBuilderTests(unittest.TestCase):
