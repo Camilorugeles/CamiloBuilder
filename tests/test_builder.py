@@ -1,3 +1,4 @@
+import contextlib
 import subprocess
 import sys
 import tempfile
@@ -98,6 +99,10 @@ class ComponentBuilderTests(unittest.TestCase):
         self.assertEqual(
             (department / "README.md").read_text(encoding="utf-8"),
             "# operations\n\nDepartamento de Camilo OS.\n",
+        )
+        self.assertEqual(
+            sorted(path.name for path in department.iterdir()),
+            ["README.md", "__init__.py"],
         )
 
     def test_component_build_is_idempotent_and_preserves_readme(self):
@@ -236,6 +241,125 @@ class ComponentBuilderTests(unittest.TestCase):
         self.assertFalse((self.project / "agents" / "assistant").exists())
 
 
+class DepartmentTemplateTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary_directory.name)
+        self.project = ProjectBuilder(self.root).build("demo")
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+
+    def make_registered_template(self, name="operations"):
+        templates = self.root / "registered"
+        template = templates / "department" / name
+        (template / "files").mkdir(parents=True)
+        (template / "template.json").write_text(
+            '{"schema_version": 1, "component_type": "department", '
+            f'"name": "{name}", "required_variables": ["component_name"]}}',
+            encoding="utf-8",
+        )
+        return templates, template
+
+    def test_resolves_a_registered_department_template(self):
+        templates, template = self.make_registered_template()
+        (template / "files" / "profile.txt").write_text(
+            "Department: {{ component_name }}\n", encoding="utf-8"
+        )
+
+        department = DepartmentBuilder(
+            self.project, "operations", templates_dir=templates
+        ).build("support")
+
+        self.assertEqual(
+            (department / "profile.txt").read_text(encoding="utf-8"),
+            "Department: support\n",
+        )
+        self.assertTrue((department / "__init__.py").is_file())
+
+    def test_existing_external_path_has_priority_over_registered_name(self):
+        templates, registered = self.make_registered_template()
+        (registered / "files" / "source.txt").write_text(
+            "registered\n", encoding="utf-8"
+        )
+        external = self.root / "operations"
+        external.mkdir()
+        (external / "source.txt").write_text("external\n", encoding="utf-8")
+
+        with contextlib.chdir(self.root):
+            department = DepartmentBuilder(
+                self.project, "operations", templates_dir=templates
+            ).build("support")
+
+        self.assertEqual(
+            (department / "source.txt").read_text(encoding="utf-8"), "external\n"
+        )
+
+    def test_external_template_renders_variables_and_binary_files(self):
+        template = self.root / "external-template"
+        template.mkdir()
+        (template / "details.txt").write_text(
+            "{{ component_type }}: {{ component_name }}\n", encoding="utf-8"
+        )
+        binary_content = b"\xff\x00\x10"
+        (template / "asset.bin").write_bytes(binary_content)
+
+        department = DepartmentBuilder(self.project, template).build("support")
+
+        self.assertEqual(
+            (department / "details.txt").read_text(encoding="utf-8"),
+            "departamento: support\n",
+        )
+        self.assertEqual((department / "asset.bin").read_bytes(), binary_content)
+
+    def test_default_template_is_idempotent_and_preserves_custom_files(self):
+        builder = DepartmentBuilder(self.project)
+        department = builder.build("support")
+        (department / "README.md").write_text("Personalizado\n", encoding="utf-8")
+        (department / "custom.txt").write_text("custom\n", encoding="utf-8")
+
+        self.assertEqual(builder.build("support"), department)
+        self.assertEqual(
+            (department / "README.md").read_text(encoding="utf-8"),
+            "Personalizado\n",
+        )
+        self.assertEqual(
+            (department / "custom.txt").read_text(encoding="utf-8"), "custom\n"
+        )
+
+    def test_rejects_a_missing_external_template_path(self):
+        missing = self.root / "missing" / "department-template"
+
+        with self.assertRaisesRegex(InvalidTemplate, "No existe el directorio"):
+            DepartmentBuilder(self.project, missing).build("support")
+        self.assertFalse((self.project / "departments" / "support").exists())
+
+    def test_rejects_external_template_symlinks_before_writing(self):
+        template = self.root / "external-template"
+        template.mkdir()
+        external = self.root / "external.txt"
+        external.write_text("secret\n", encoding="utf-8")
+        (template / "linked.txt").symlink_to(external)
+
+        with self.assertRaises(ValueError):
+            DepartmentBuilder(self.project, template).build("support")
+        self.assertFalse((self.project / "departments" / "support").exists())
+
+    def test_rejects_destination_escape_through_a_symlink(self):
+        template = self.root / "external-template"
+        (template / "nested").mkdir(parents=True)
+        (template / "nested" / "file.txt").write_text("content\n", encoding="utf-8")
+        department = self.project / "departments" / "support"
+        department.mkdir()
+        external = self.root / "external"
+        external.mkdir()
+        (department / "nested").symlink_to(external, target_is_directory=True)
+
+        with self.assertRaises(ValueError):
+            DepartmentBuilder(self.project, template).build("support")
+        self.assertFalse((external / "file.txt").exists())
+
+
 class ComponentCatalogTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -339,13 +463,102 @@ class CommandLineTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Departamento creado:", result.stdout)
-            self.assertTrue(
+            department = (
+                Path(temporary_directory)
+                / "cli-demo"
+                / "departments"
+                / "operations"
+            )
+            self.assertEqual(
+                (department / "README.md").read_bytes(),
+                b"# operations\n\nDepartamento de Camilo OS.\n",
+            )
+            self.assertEqual(
+                sorted(path.name for path in department.iterdir()),
+                ["README.md", "__init__.py"],
+            )
+
+    def test_create_department_supports_an_external_template(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            ProjectBuilder(root).build("cli-demo")
+            template = root / "department-template"
+            template.mkdir()
+            (template / "department.txt").write_text(
+                "Departamento: {{ component_name }}\n", encoding="utf-8"
+            )
+
+            result = self.run_builder(
+                "create-department",
+                "cli-demo",
+                "operations",
+                "--output",
+                temporary_directory,
+                "--template",
+                str(template),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Departamento creado:", result.stdout)
+            self.assertEqual(
                 (
-                    Path(temporary_directory)
+                    root
                     / "cli-demo"
                     / "departments"
                     / "operations"
-                ).is_dir()
+                    / "department.txt"
+                ).read_text(encoding="utf-8"),
+                "Departamento: operations\n",
+            )
+
+    def test_create_department_supports_a_registered_template_name(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            ProjectBuilder(root).build("cli-demo")
+
+            result = self.run_builder(
+                "create-department",
+                "cli-demo",
+                "operations",
+                "--output",
+                temporary_directory,
+                "--template",
+                "default",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Departamento creado:", result.stdout)
+            self.assertEqual(
+                (
+                    root
+                    / "cli-demo"
+                    / "departments"
+                    / "operations"
+                    / "README.md"
+                ).read_bytes(),
+                b"# operations\n\nDepartamento de Camilo OS.\n",
+            )
+
+    def test_create_department_reports_a_missing_external_template_path(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            ProjectBuilder(root).build("cli-demo")
+            missing = root / "missing" / "department-template"
+
+            result = self.run_builder(
+                "create-department",
+                "cli-demo",
+                "operations",
+                "--output",
+                temporary_directory,
+                "--template",
+                str(missing),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("No existe el directorio de plantilla", result.stderr)
+            self.assertFalse(
+                (root / "cli-demo" / "departments" / "operations").exists()
             )
 
     def test_create_component_reports_missing_project(self):

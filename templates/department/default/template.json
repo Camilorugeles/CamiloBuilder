@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "component_type": "department",
+  "name": "default",
+  "required_variables": ["component_name"]
+}
