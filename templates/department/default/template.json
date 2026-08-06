@@ -2,5 +2,6 @@
   "schema_version": 1,
   "component_type": "department",
   "name": "default",
+  "description": "Plantilla predeterminada de departamento.",
   "required_variables": ["component_name"]
 }

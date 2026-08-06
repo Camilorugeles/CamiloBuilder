@@ -16,8 +16,13 @@ from builders.component_catalog import ComponentCatalog, ComponentNotFound
 from builders.department_builder import DepartmentBuilder
 from builders.project_builder import InvalidProjectName, ProjectBuilder
 from template_system.errors import TemplateError
+from template_system.manifest import TemplateManifest
+from template_system.registry import TemplateRegistry
+from template_system.renderer import TemplateRenderer
+from template_system.validation import validate_template as validate_template_source
 
 ROOT = Path(__file__).resolve().parent
+TEMPLATES = ROOT / "templates"
 
 
 def status() -> None:
@@ -97,6 +102,50 @@ def inspect_component(
     return details
 
 
+def template_details(manifest: TemplateManifest) -> dict[str, object]:
+    return {
+        "name": manifest.name,
+        "type": manifest.component_type,
+        "version": manifest.schema_version,
+        "description": manifest.description,
+        "required_variables": list(manifest.required_variables),
+    }
+
+
+def list_templates(component_type: str | None = None) -> list[dict[str, object]]:
+    templates = [
+        template_details(manifest)
+        for _path, manifest in TemplateRegistry(TEMPLATES).list(component_type)
+    ]
+    print(json.dumps(templates, ensure_ascii=False, indent=2))
+    return templates
+
+
+def inspect_template(template_name: str, component_type: str) -> dict[str, object]:
+    _path, manifest = TemplateRegistry(TEMPLATES).resolve(
+        component_type, template_name
+    )
+    details = template_details(manifest)
+    print(json.dumps(details, ensure_ascii=False, indent=2))
+    return details
+
+
+def validate_template(template: str, component_type: str) -> dict[str, object]:
+    manifest, file_count = validate_template_source(
+        TemplateRegistry(TEMPLATES),
+        TemplateRenderer(),
+        component_type,
+        template,
+    )
+    details = {
+        "valid": True,
+        **template_details(manifest),
+        "files": file_count,
+    }
+    print(json.dumps(details, ensure_ascii=False, indent=2))
+    return details
+
+
 def main():
 
     parser = argparse.ArgumentParser(prog="builder", description="Constructor de Camilo OS")
@@ -155,6 +204,37 @@ def main():
             help="Directorio que contiene el proyecto (por defecto: ./output)",
         )
 
+    list_templates_parser = sub.add_parser(
+        "list-templates", help="Lista las plantillas registradas"
+    )
+    list_templates_parser.add_argument(
+        "--type", dest="component_type", help="Filtra por tipo de componente"
+    )
+
+    inspect_template_parser = sub.add_parser(
+        "inspect-template", help="Muestra los metadatos de una plantilla registrada"
+    )
+    inspect_template_parser.add_argument("name", help="Nombre de la plantilla")
+    inspect_template_parser.add_argument(
+        "--type",
+        dest="component_type",
+        required=True,
+        help="Tipo de componente",
+    )
+
+    validate_template_parser = sub.add_parser(
+        "validate-template", help="Valida una plantilla sin generar archivos"
+    )
+    validate_template_parser.add_argument(
+        "template", help="Nombre registrado o ruta de plantilla"
+    )
+    validate_template_parser.add_argument(
+        "--type",
+        dest="component_type",
+        required=True,
+        help="Tipo de componente",
+    )
+
     args = parser.parse_args()
 
     if args.cmd == "status":
@@ -203,6 +283,24 @@ def main():
                 builder_class, args.project, args.name, args.output
             )
         except (ComponentNotFound, InvalidProjectName, ProjectNotFound) as error:
+            parser.error(str(error))
+
+    elif args.cmd == "list-templates":
+        try:
+            list_templates(args.component_type)
+        except TemplateError as error:
+            parser.error(str(error))
+
+    elif args.cmd == "inspect-template":
+        try:
+            inspect_template(args.name, args.component_type)
+        except TemplateError as error:
+            parser.error(str(error))
+
+    elif args.cmd == "validate-template":
+        try:
+            validate_template(args.template, args.component_type)
+        except (OSError, TemplateError) as error:
             parser.error(str(error))
 
     else:

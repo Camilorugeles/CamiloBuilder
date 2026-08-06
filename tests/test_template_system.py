@@ -13,6 +13,7 @@ from template_system.manifest import TemplateManifest
 from template_system.registry import TemplateRegistry
 from template_system.renderer import TemplateRenderer
 from template_system.resolver import TemplateResolver
+from template_system.validation import validate_template
 
 
 class TemplateTestCase(unittest.TestCase):
@@ -55,6 +56,28 @@ class TemplateManifestTests(TemplateTestCase):
         self.assertEqual(manifest.component_type, "agent")
         self.assertEqual(manifest.name, "default")
         self.assertEqual(manifest.required_variables, ("component_name",))
+        self.assertEqual(manifest.description, "")
+
+    def test_loads_an_optional_description(self):
+        template = self.make_template()
+        manifest_path = template / "template.json"
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        data["description"] = "A reusable agent template."
+        manifest_path.write_text(json.dumps(data), encoding="utf-8")
+
+        manifest = TemplateManifest.load(manifest_path)
+
+        self.assertEqual(manifest.description, "A reusable agent template.")
+
+    def test_rejects_a_non_string_description(self):
+        template = self.make_template()
+        manifest_path = template / "template.json"
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+        data["description"] = 42
+        manifest_path.write_text(json.dumps(data), encoding="utf-8")
+
+        with self.assertRaises(InvalidTemplateManifest):
+            TemplateManifest.load(manifest_path)
 
     def test_rejects_invalid_json_and_schema(self):
         manifest_path = self.root / "template.json"
@@ -115,6 +138,32 @@ class TemplateRegistryTests(TemplateTestCase):
         with self.assertRaises(InvalidTemplateManifest):
             TemplateRegistry(self.root / "templates").resolve("agent")
 
+    def test_lists_registered_templates_in_stable_order(self):
+        self.make_template(component_type="department")
+        self.make_template(component_type="agent", name="research")
+        self.make_template(component_type="agent")
+        registry = TemplateRegistry(self.root / "templates")
+
+        manifests = [manifest for _path, manifest in registry.list()]
+
+        self.assertEqual(
+            [(manifest.component_type, manifest.name) for manifest in manifests],
+            [
+                ("agent", "default"),
+                ("agent", "research"),
+                ("department", "default"),
+            ],
+        )
+
+    def test_lists_registered_templates_filtered_by_type(self):
+        self.make_template(component_type="department")
+        agent = self.make_template(component_type="agent")
+
+        templates = TemplateRegistry(self.root / "templates").list("agent")
+
+        self.assertEqual(len(templates), 1)
+        self.assertEqual(templates[0][0], agent)
+
 
 class TemplateResolverTests(TemplateTestCase):
     def test_resolves_default_and_named_registered_templates(self):
@@ -145,6 +194,131 @@ class TemplateResolverTests(TemplateTestCase):
 
         with self.assertRaisesRegex(TemplateNotFound, "No existe el directorio"):
             resolver.resolve("agent", str(missing))
+
+
+class TemplateValidationTests(TemplateTestCase):
+    def test_validates_a_registered_template(self):
+        template = self.make_template(required_variables=["component_name"])
+        (template / "files" / "README.md").write_text(
+            "{{ component_name }}\n", encoding="utf-8"
+        )
+
+        manifest, file_count = validate_template(
+            TemplateRegistry(self.root / "templates"),
+            TemplateRenderer(),
+            "agent",
+            "default",
+        )
+
+        self.assertEqual(manifest.name, "default")
+        self.assertEqual(file_count, 1)
+
+    def test_validates_a_legacy_external_template_without_writing(self):
+        external = self.root / "legacy"
+        external.mkdir()
+        (external / "README.md").write_text(
+            "{{ component_type }}: {{ component_name }}\n", encoding="utf-8"
+        )
+        (external / "asset.bin").write_bytes(b"\xff\x00")
+        before = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
+
+        manifest, file_count = validate_template(
+            TemplateRegistry(self.root / "templates"),
+            TemplateRenderer(),
+            "agent",
+            external,
+        )
+
+        after = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
+        self.assertEqual(manifest.name, "legacy")
+        self.assertEqual(manifest.description, "Plantilla externa heredada.")
+        self.assertEqual(file_count, 2)
+        self.assertEqual(after, before)
+
+    def test_existing_external_path_has_priority_over_registered_name(self):
+        self.make_template(name="research")
+        external = self.root / "research"
+        external.mkdir()
+        (external / "source.txt").write_text("external\n", encoding="utf-8")
+
+        with contextlib.chdir(self.root):
+            manifest, file_count = validate_template(
+                TemplateRegistry(self.root / "templates"),
+                TemplateRenderer(),
+                "agent",
+                "research",
+            )
+
+        self.assertEqual(manifest.description, "Plantilla externa heredada.")
+        self.assertEqual(file_count, 1)
+
+    def test_validates_an_external_template_with_a_manifest(self):
+        external = self.root / "modern"
+        (external / "files").mkdir(parents=True)
+        (external / "template.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "component_type": "agent",
+                    "name": "modern",
+                    "description": "Modern external template.",
+                    "required_variables": ["component_name"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (external / "files" / "README.md").write_text(
+            "{{ component_name }}\n", encoding="utf-8"
+        )
+
+        manifest, file_count = validate_template(
+            TemplateRegistry(self.root / "templates"),
+            TemplateRenderer(),
+            "agent",
+            external,
+        )
+
+        self.assertEqual(manifest.name, "modern")
+        self.assertEqual(file_count, 1)
+
+    def test_rejects_a_missing_path_and_an_invalid_external_structure(self):
+        registry = TemplateRegistry(self.root / "templates")
+        missing = self.root / "missing" / "template"
+        with self.assertRaisesRegex(TemplateNotFound, "No existe el directorio"):
+            validate_template(
+                registry, TemplateRenderer(), "agent", str(missing)
+            )
+
+        external = self.root / "modern"
+        external.mkdir()
+        (external / "template.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "component_type": "agent",
+                    "name": "modern",
+                    "required_variables": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaises(TemplateRenderError):
+            validate_template(registry, TemplateRenderer(), "agent", external)
+
+    def test_rejects_external_symlinks(self):
+        external = self.root / "legacy"
+        external.mkdir()
+        target = self.root / "target.txt"
+        target.write_text("secret\n", encoding="utf-8")
+        (external / "linked.txt").symlink_to(target)
+
+        with self.assertRaises(TemplateRenderError):
+            validate_template(
+                TemplateRegistry(self.root / "templates"),
+                TemplateRenderer(),
+                "agent",
+                external,
+            )
 
 
 class TemplateRendererTests(TemplateTestCase):
@@ -214,6 +388,37 @@ class TemplateRendererTests(TemplateTestCase):
         self.assertEqual(
             (destination / "README.md").read_text(encoding="utf-8"), "Custom\n"
         )
+
+    def test_validates_text_and_binary_files_without_writing(self):
+        template = self.make_template(required_variables=["component_name"])
+        (template / "files" / "README.md").write_text(
+            "{{ component_name }}\n", encoding="utf-8"
+        )
+        (template / "files" / "asset.bin").write_bytes(b"\xff\x00")
+        manifest = TemplateManifest.load(template / "template.json")
+        before = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
+
+        file_count = TemplateRenderer().validate(
+            template, manifest, {"component_name": "assistant"}
+        )
+
+        after = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
+        self.assertEqual(file_count, 2)
+        self.assertEqual(after, before)
+
+    def test_validation_rejects_unknown_markers_without_writing(self):
+        template = self.make_template()
+        (template / "files" / "README.md").write_text(
+            "{{ unknown }}\n", encoding="utf-8"
+        )
+        manifest = TemplateManifest.load(template / "template.json")
+        before = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
+
+        with self.assertRaises(TemplateRenderError):
+            TemplateRenderer().validate(template, manifest, {})
+
+        after = sorted(path.relative_to(self.root) for path in self.root.rglob("*"))
+        self.assertEqual(after, before)
 
     def test_rejects_template_symlinks_before_writing(self):
         template = self.make_template()

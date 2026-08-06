@@ -33,6 +33,34 @@ class TemplateRegistry:
             )
         return template_dir, manifest
 
+    def list(
+        self, component_type: str | None = None
+    ) -> list[tuple[Path, TemplateManifest]]:
+        if component_type is not None:
+            self._validate_key(component_type, "tipo")
+            component_dirs = [self.templates_dir / component_type]
+        elif self.templates_dir.is_dir():
+            component_dirs = sorted(
+                path
+                for path in self.templates_dir.iterdir()
+                if path.is_dir() and not path.name.startswith(".")
+            )
+        else:
+            component_dirs = []
+
+        templates = []
+        for component_dir in component_dirs:
+            if not component_dir.is_dir():
+                continue
+            self._validate_key(component_dir.name, "tipo")
+            for template_dir in sorted(component_dir.iterdir()):
+                if not template_dir.is_dir() or template_dir.name.startswith("."):
+                    continue
+                templates.append(
+                    self.resolve(component_dir.name, template_dir.name)
+                )
+        return templates
+
     @staticmethod
     def _validate_key(value: str, label: str) -> None:
         if not isinstance(value, str) or not TEMPLATE_KEY_PATTERN.fullmatch(value):

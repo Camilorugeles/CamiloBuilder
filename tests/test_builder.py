@@ -756,6 +756,129 @@ class CommandLineTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("No existe el agente", result.stderr)
 
+    def test_list_templates_outputs_stable_json(self):
+        result = self.run_builder("list-templates")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout),
+            [
+                {
+                    "name": "default",
+                    "type": "agent",
+                    "version": 1,
+                    "description": "Plantilla predeterminada de agente.",
+                    "required_variables": ["component_name"],
+                },
+                {
+                    "name": "default",
+                    "type": "department",
+                    "version": 1,
+                    "description": "Plantilla predeterminada de departamento.",
+                    "required_variables": ["component_name"],
+                },
+                {
+                    "name": "default",
+                    "type": "project",
+                    "version": 1,
+                    "description": "Plantilla predeterminada de proyecto.",
+                    "required_variables": ["project_name"],
+                },
+            ],
+        )
+
+    def test_list_templates_filters_by_component_type(self):
+        result = self.run_builder("list-templates", "--type", "agent")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        templates = json.loads(result.stdout)
+        self.assertEqual(len(templates), 1)
+        self.assertEqual(templates[0]["type"], "agent")
+
+    def test_inspect_template_outputs_stable_json(self):
+        result = self.run_builder(
+            "inspect-template", "default", "--type", "department"
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout,
+            '{\n'
+            '  "name": "default",\n'
+            '  "type": "department",\n'
+            '  "version": 1,\n'
+            '  "description": "Plantilla predeterminada de departamento.",\n'
+            '  "required_variables": [\n'
+            '    "component_name"\n'
+            '  ]\n'
+            '}\n',
+        )
+        self.assertEqual(
+            json.loads(result.stdout),
+            {
+                "name": "default",
+                "type": "department",
+                "version": 1,
+                "description": "Plantilla predeterminada de departamento.",
+                "required_variables": ["component_name"],
+            },
+        )
+
+    def test_validate_template_validates_a_registered_template(self):
+        result = self.run_builder(
+            "validate-template", "default", "--type", "agent"
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            json.loads(result.stdout),
+            {
+                "valid": True,
+                "name": "default",
+                "type": "agent",
+                "version": 1,
+                "description": "Plantilla predeterminada de agente.",
+                "required_variables": ["component_name"],
+                "files": 2,
+            },
+        )
+
+    def test_validate_template_validates_legacy_path_without_writing(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            template = Path(temporary_directory) / "legacy"
+            template.mkdir()
+            (template / "README.md").write_text(
+                "{{ component_name }}\n", encoding="utf-8"
+            )
+            before = sorted(
+                path.relative_to(temporary_directory)
+                for path in Path(temporary_directory).rglob("*")
+            )
+
+            result = self.run_builder(
+                "validate-template", str(template), "--type", "agent"
+            )
+
+            after = sorted(
+                path.relative_to(temporary_directory)
+                for path in Path(temporary_directory).rglob("*")
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(json.loads(result.stdout)["valid"])
+            self.assertEqual(after, before)
+
+    def test_validate_template_reports_errors_on_stderr(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            missing = Path(temporary_directory) / "missing" / "template"
+
+            result = self.run_builder(
+                "validate-template", str(missing), "--type", "agent"
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("No existe el directorio de plantilla", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

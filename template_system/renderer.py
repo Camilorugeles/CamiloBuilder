@@ -9,6 +9,8 @@ VARIABLE_PATTERN = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}}")
 
 
 class TemplateRenderer:
+    VALIDATION_DESTINATION = Path("/__camilo_builder_template_validation__")
+
     def render(
         self,
         template_dir: Path,
@@ -47,6 +49,29 @@ class TemplateRenderer:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(content)
         return destination
+
+    def validate(
+        self,
+        template_dir: Path,
+        manifest: TemplateManifest,
+        variables: dict[str, str],
+    ) -> int:
+        template_dir = Path(template_dir)
+        if template_dir.is_symlink():
+            raise TemplateRenderError("La plantilla no puede contener enlaces simbólicos.")
+        return self.validate_files(template_dir / "files", manifest, variables)
+
+    def validate_files(
+        self,
+        files_dir: Path,
+        manifest: TemplateManifest,
+        variables: dict[str, str],
+    ) -> int:
+        self._validate_variables(manifest, variables)
+        operations = self._plan(
+            Path(files_dir), self.VALIDATION_DESTINATION, variables
+        )
+        return sum(not source_is_dir for source_is_dir, _target, _content in operations)
 
     def _plan(
         self, files_dir: Path, destination: Path, variables: dict[str, str]

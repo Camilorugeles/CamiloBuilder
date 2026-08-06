@@ -2,5 +2,6 @@
   "schema_version": 1,
   "component_type": "agent",
   "name": "default",
+  "description": "Plantilla predeterminada de agente.",
   "required_variables": ["component_name"]
 }

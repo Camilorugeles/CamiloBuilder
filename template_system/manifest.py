@@ -16,6 +16,7 @@ class TemplateManifest:
     component_type: str
     name: str
     required_variables: tuple[str, ...]
+    description: str = ""
 
     @classmethod
     def load(cls, path: Path) -> "TemplateManifest":
@@ -37,6 +38,7 @@ class TemplateManifest:
         component_type = data.get("component_type")
         name = data.get("name")
         required_variables = data.get("required_variables")
+        description = data.get("description", "")
         if not isinstance(component_type, str) or not MANIFEST_KEY_PATTERN.fullmatch(
             component_type
         ):
@@ -53,10 +55,13 @@ class TemplateManifest:
             )
         if len(required_variables) != len(set(required_variables)):
             raise InvalidTemplateManifest("required_variables contiene valores repetidos.")
+        if not isinstance(description, str):
+            raise InvalidTemplateManifest("description debe ser una cadena.")
 
         return cls(
             schema_version=1,
             component_type=component_type,
             name=name,
             required_variables=tuple(required_variables),
+            description=description,
         )
