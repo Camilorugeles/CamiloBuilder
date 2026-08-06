@@ -15,6 +15,7 @@ from builders.component_builder import (
 from builders.component_catalog import ComponentCatalog, ComponentNotFound
 from builders.department_builder import DepartmentBuilder
 from builders.project_builder import InvalidProjectName, ProjectBuilder
+from builders.service_builder import ServiceBuilder
 from template_system.errors import TemplateError
 from template_system.manifest import TemplateManifest
 from template_system.registry import TemplateRegistry
@@ -48,7 +49,7 @@ def create_project(name: str, output: Path | None = None) -> Path:
 
 
 def create_component(
-    builder_class: type[AgentBuilder] | type[DepartmentBuilder],
+    builder_class: type[AgentBuilder] | type[DepartmentBuilder] | type[ServiceBuilder],
     project_name: str,
     component_name: str,
     output: Path | None = None,
@@ -165,6 +166,7 @@ def main():
     for command, help_text in (
         ("create-agent", "Crea un agente dentro de un proyecto"),
         ("create-department", "Crea un departamento dentro de un proyecto"),
+        ("create-service", "Crea un servicio dentro de un proyecto"),
     ):
         component_parser = sub.add_parser(command, help=help_text)
         component_parser.add_argument("project", help="Nombre del proyecto")
@@ -246,10 +248,13 @@ def main():
         except InvalidProjectName as error:
             parser.error(str(error))
 
-    elif args.cmd in {"create-agent", "create-department"}:
-        builder_class = (
-            AgentBuilder if args.cmd == "create-agent" else DepartmentBuilder
-        )
+    elif args.cmd in {"create-agent", "create-department", "create-service"}:
+        if args.cmd == "create-agent":
+            builder_class = AgentBuilder
+        elif args.cmd == "create-department":
+            builder_class = DepartmentBuilder
+        else:
+            builder_class = ServiceBuilder
         try:
             create_component(
                 builder_class,

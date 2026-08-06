@@ -9,6 +9,7 @@ python3 builder.py status
 python3 builder.py create-project mi-proyecto
 python3 builder.py create-agent mi-proyecto mi-agente
 python3 builder.py create-department mi-proyecto operaciones
+python3 builder.py create-service mi-proyecto notificaciones
 python3 builder.py list-agents mi-proyecto
 python3 builder.py list-departments mi-proyecto
 python3 builder.py inspect-agent mi-proyecto mi-agente
@@ -26,6 +27,7 @@ Los comandos crean o amplían proyectos dentro de `output/`. Para elegir otro de
 python3 builder.py create-project mi-proyecto --output /ruta/de/salida
 python3 builder.py create-agent mi-proyecto mi-agente --output /ruta/de/salida
 python3 builder.py create-department mi-proyecto operaciones --output /ruta/de/salida
+python3 builder.py create-service mi-proyecto notificaciones --output /ruta/de/salida
 ```
 
 Los agentes y departamentos pueden inicializarse desde un directorio de plantilla:

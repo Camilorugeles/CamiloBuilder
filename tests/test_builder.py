@@ -16,6 +16,7 @@ from builders.component_builder import (
 from builders.component_catalog import ComponentCatalog, ComponentNotFound
 from builders.department_builder import DepartmentBuilder
 from builders.project_builder import InvalidProjectName, ProjectBuilder
+from builders.service_builder import ServiceBuilder
 from builders.templated_component_builder import TemplatedComponentBuilder
 
 
@@ -26,10 +27,13 @@ class TemplatedComponentBuilderStructureTests(unittest.TestCase):
     def test_concrete_builders_share_the_templated_base(self):
         self.assertTrue(issubclass(AgentBuilder, TemplatedComponentBuilder))
         self.assertTrue(issubclass(DepartmentBuilder, TemplatedComponentBuilder))
+        self.assertTrue(issubclass(ServiceBuilder, TemplatedComponentBuilder))
         self.assertNotIn("__init__", AgentBuilder.__dict__)
         self.assertNotIn("build", AgentBuilder.__dict__)
         self.assertNotIn("__init__", DepartmentBuilder.__dict__)
         self.assertNotIn("build", DepartmentBuilder.__dict__)
+        self.assertNotIn("__init__", ServiceBuilder.__dict__)
+        self.assertNotIn("build", ServiceBuilder.__dict__)
 
     def test_concrete_builders_preserve_the_public_constructor_signature(self):
         expected_parameters = (
@@ -39,7 +43,7 @@ class TemplatedComponentBuilderStructureTests(unittest.TestCase):
             "renderer",
         )
 
-        for builder_class in (AgentBuilder, DepartmentBuilder):
+        for builder_class in (AgentBuilder, DepartmentBuilder, ServiceBuilder):
             with self.subTest(builder_class=builder_class.__name__):
                 signature = inspect.signature(builder_class)
                 self.assertEqual(tuple(signature.parameters), expected_parameters)
@@ -63,6 +67,14 @@ class TemplatedComponentBuilderStructureTests(unittest.TestCase):
                 DepartmentBuilder.component_label,
             ),
             ("department", "departments", "Departamento"),
+        )
+        self.assertEqual(
+            (
+                ServiceBuilder.component_type,
+                ServiceBuilder.component_folder,
+                ServiceBuilder.component_label,
+            ),
+            ("service", "services", "Servicio"),
         )
 
 
@@ -406,6 +418,135 @@ class DepartmentTemplateTests(unittest.TestCase):
         self.assertFalse((external / "file.txt").exists())
 
 
+class ServiceBuilderTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary_directory.name)
+        self.project = ProjectBuilder(self.root).build("demo")
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+
+    def make_registered_template(self, name="worker"):
+        templates = self.root / "registered"
+        template = templates / "service" / name
+        (template / "files").mkdir(parents=True)
+        (template / "template.json").write_text(
+            '{"schema_version": 1, "component_type": "service", '
+            f'"name": "{name}", "required_variables": ["component_name"]}}',
+            encoding="utf-8",
+        )
+        return templates, template
+
+    def test_builds_the_exact_default_service_structure(self):
+        service = ServiceBuilder(self.project).build("notifications")
+
+        self.assertEqual(service, self.project / "services" / "notifications")
+        self.assertEqual(
+            sorted(path.name for path in service.iterdir()),
+            ["README.md", "__init__.py"],
+        )
+        self.assertEqual(
+            (service / "README.md").read_bytes(),
+            b"# notifications\n\nServicio de Camilo OS.\n",
+        )
+
+    def test_default_service_is_idempotent_and_preserves_custom_files(self):
+        builder = ServiceBuilder(self.project)
+        service = builder.build("notifications")
+        (service / "README.md").write_text("Personalizado\n", encoding="utf-8")
+        (service / "custom.txt").write_text("custom\n", encoding="utf-8")
+
+        self.assertEqual(builder.build("notifications"), service)
+        self.assertEqual(
+            (service / "README.md").read_text(encoding="utf-8"),
+            "Personalizado\n",
+        )
+        self.assertEqual(
+            (service / "custom.txt").read_text(encoding="utf-8"), "custom\n"
+        )
+
+    def test_resolves_a_registered_service_template(self):
+        templates, template = self.make_registered_template()
+        (template / "files" / "worker.txt").write_text(
+            "Worker: {{ component_name }}\n", encoding="utf-8"
+        )
+
+        service = ServiceBuilder(
+            self.project, "worker", templates_dir=templates
+        ).build("notifications")
+
+        self.assertEqual(
+            (service / "worker.txt").read_text(encoding="utf-8"),
+            "Worker: notifications\n",
+        )
+
+    def test_existing_external_path_has_priority_over_registered_name(self):
+        templates, registered = self.make_registered_template()
+        (registered / "files" / "source.txt").write_text(
+            "registered\n", encoding="utf-8"
+        )
+        external = self.root / "worker"
+        external.mkdir()
+        (external / "source.txt").write_text("external\n", encoding="utf-8")
+
+        with contextlib.chdir(self.root):
+            service = ServiceBuilder(
+                self.project, "worker", templates_dir=templates
+            ).build("notifications")
+
+        self.assertEqual(
+            (service / "source.txt").read_text(encoding="utf-8"), "external\n"
+        )
+
+    def test_external_template_renders_variables_and_binary_files(self):
+        template = self.root / "external-template"
+        template.mkdir()
+        (template / "details.txt").write_text(
+            "{{ component_type }}: {{ component_name }}\n", encoding="utf-8"
+        )
+        binary_content = b"\xff\x00\x10"
+        (template / "asset.bin").write_bytes(binary_content)
+
+        service = ServiceBuilder(self.project, template).build("notifications")
+
+        self.assertEqual(
+            (service / "details.txt").read_text(encoding="utf-8"),
+            "servicio: notifications\n",
+        )
+        self.assertEqual((service / "asset.bin").read_bytes(), binary_content)
+
+    def test_rejects_missing_templates_unsafe_names_and_missing_projects(self):
+        missing_template = self.root / "missing" / "service-template"
+        with self.assertRaisesRegex(InvalidTemplate, "No existe el directorio"):
+            ServiceBuilder(self.project, missing_template).build("notifications")
+        with self.assertRaises(InvalidComponentName):
+            ServiceBuilder(self.project).build("../service")
+        with self.assertRaises(ProjectNotFound):
+            ServiceBuilder(self.root / "missing-project").build("notifications")
+
+    def test_rejects_external_symlinks_and_destination_escapes(self):
+        template = self.root / "external-template"
+        template.mkdir()
+        external_file = self.root / "external.txt"
+        external_file.write_text("secret\n", encoding="utf-8")
+        (template / "linked.txt").symlink_to(external_file)
+        with self.assertRaises(ValueError):
+            ServiceBuilder(self.project, template).build("notifications")
+
+        (template / "linked.txt").unlink()
+        (template / "nested").mkdir()
+        (template / "nested" / "file.txt").write_text("content\n", encoding="utf-8")
+        service = self.project / "services" / "notifications"
+        service.mkdir()
+        external_dir = self.root / "external"
+        external_dir.mkdir()
+        (service / "nested").symlink_to(external_dir, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            ServiceBuilder(self.project, template).build("notifications")
+        self.assertFalse((external_dir / "file.txt").exists())
+
+
 class ComponentCatalogTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -607,6 +748,106 @@ class CommandLineTests(unittest.TestCase):
                 (root / "cli-demo" / "departments" / "operations").exists()
             )
 
+    def test_create_service_supports_custom_output(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            ProjectBuilder(root).build("cli-demo")
+
+            result = self.run_builder(
+                "create-service",
+                "cli-demo",
+                "notifications",
+                "--output",
+                temporary_directory,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            service = root / "cli-demo" / "services" / "notifications"
+            self.assertEqual(
+                result.stdout, f"\nServicio creado:\n{service}\n\n"
+            )
+            self.assertEqual(
+                sorted(path.name for path in service.iterdir()),
+                ["README.md", "__init__.py"],
+            )
+            self.assertEqual(
+                (service / "README.md").read_bytes(),
+                b"# notifications\n\nServicio de Camilo OS.\n",
+            )
+
+    def test_create_service_supports_an_external_template(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            ProjectBuilder(root).build("cli-demo")
+            template = root / "service-template"
+            template.mkdir()
+            (template / "service.txt").write_text(
+                "Servicio: {{ component_name }}\n", encoding="utf-8"
+            )
+
+            result = self.run_builder(
+                "create-service",
+                "cli-demo",
+                "notifications",
+                "--output",
+                temporary_directory,
+                "--template",
+                str(template),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Servicio creado:", result.stdout)
+            self.assertEqual(
+                (
+                    root
+                    / "cli-demo"
+                    / "services"
+                    / "notifications"
+                    / "service.txt"
+                ).read_text(encoding="utf-8"),
+                "Servicio: notifications\n",
+            )
+
+    def test_create_service_supports_a_registered_template_name(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            ProjectBuilder(root).build("cli-demo")
+
+            result = self.run_builder(
+                "create-service",
+                "cli-demo",
+                "notifications",
+                "--output",
+                temporary_directory,
+                "--template",
+                "default",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Servicio creado:", result.stdout)
+
+    def test_create_service_reports_a_missing_external_template_path(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            ProjectBuilder(root).build("cli-demo")
+            missing = root / "missing" / "service-template"
+
+            result = self.run_builder(
+                "create-service",
+                "cli-demo",
+                "notifications",
+                "--output",
+                temporary_directory,
+                "--template",
+                str(missing),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("No existe el directorio de plantilla", result.stderr)
+            self.assertFalse(
+                (root / "cli-demo" / "services" / "notifications").exists()
+            )
+
     def test_create_component_reports_missing_project(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             result = self.run_builder(
@@ -784,6 +1025,13 @@ class CommandLineTests(unittest.TestCase):
                     "description": "Plantilla predeterminada de proyecto.",
                     "required_variables": ["project_name"],
                 },
+                {
+                    "name": "default",
+                    "type": "service",
+                    "version": 1,
+                    "description": "Plantilla predeterminada de servicio.",
+                    "required_variables": ["component_name"],
+                },
             ],
         )
 
@@ -794,6 +1042,32 @@ class CommandLineTests(unittest.TestCase):
         templates = json.loads(result.stdout)
         self.assertEqual(len(templates), 1)
         self.assertEqual(templates[0]["type"], "agent")
+
+    def test_service_template_integrates_with_management_commands(self):
+        list_result = self.run_builder("list-templates", "--type", "service")
+        inspect_result = self.run_builder(
+            "inspect-template", "default", "--type", "service"
+        )
+        validate_result = self.run_builder(
+            "validate-template", "default", "--type", "service"
+        )
+
+        for result in (list_result, inspect_result, validate_result):
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(list_result.stdout)[0]["type"], "service")
+        self.assertEqual(json.loads(inspect_result.stdout)["type"], "service")
+        self.assertEqual(
+            json.loads(validate_result.stdout),
+            {
+                "valid": True,
+                "name": "default",
+                "type": "service",
+                "version": 1,
+                "description": "Plantilla predeterminada de servicio.",
+                "required_variables": ["component_name"],
+                "files": 2,
+            },
+        )
 
     def test_inspect_template_outputs_stable_json(self):
         result = self.run_builder(

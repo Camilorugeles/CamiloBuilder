@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "component_type": "service",
+  "name": "default",
+  "description": "Plantilla predeterminada de servicio.",
+  "required_variables": ["component_name"]
+}
