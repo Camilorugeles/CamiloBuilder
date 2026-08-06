@@ -25,9 +25,19 @@ class ProjectBuilderTests(unittest.TestCase):
             project = ProjectBuilder(Path(temporary_directory)).build("demo-project")
 
             self.assertEqual(project.name, "demo-project")
-            self.assertTrue((project / "README.md").is_file())
+            self.assertEqual(
+                (project / "README.md").read_text(encoding="utf-8"),
+                "# CAMILO OS\n\nProyecto generado por Camilo Builder.\n",
+            )
+            self.assertEqual(
+                sorted(path.name for path in project.iterdir()),
+                sorted((*ProjectBuilder.FOLDERS, "README.md")),
+            )
             for folder_name in ProjectBuilder.FOLDERS:
-                self.assertTrue((project / folder_name / "__init__.py").is_file())
+                folder = project / folder_name
+                self.assertEqual(
+                    sorted(path.name for path in folder.iterdir()), ["__init__.py"]
+                )
 
     def test_build_is_idempotent(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -36,6 +46,19 @@ class ProjectBuilderTests(unittest.TestCase):
             second = builder.build("demo")
 
             self.assertEqual(first, second)
+
+    def test_build_does_not_overwrite_existing_project_files(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            builder = ProjectBuilder(Path(temporary_directory))
+            project = builder.build("demo")
+            (project / "README.md").write_text("Personalizado\n", encoding="utf-8")
+
+            builder.build("demo")
+
+            self.assertEqual(
+                (project / "README.md").read_text(encoding="utf-8"),
+                "Personalizado\n",
+            )
 
     def test_build_rejects_unsafe_project_names(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -200,7 +223,15 @@ class CommandLineTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Proyecto creado:", result.stdout)
-            self.assertTrue((Path(temporary_directory) / "cli-demo" / "README.md").is_file())
+            project = Path(temporary_directory) / "cli-demo"
+            self.assertEqual(
+                (project / "README.md").read_text(encoding="utf-8"),
+                "# CAMILO OS\n\nProyecto generado por Camilo Builder.\n",
+            )
+            self.assertEqual(
+                sorted(path.name for path in project.iterdir()),
+                sorted((*ProjectBuilder.FOLDERS, "README.md")),
+            )
 
     def test_create_agent_supports_custom_output(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

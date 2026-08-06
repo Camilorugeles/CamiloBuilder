@@ -1,6 +1,9 @@
 import re
 from pathlib import Path
 
+from template_system.registry import TemplateRegistry
+from template_system.renderer import TemplateRenderer
+
 
 PROJECT_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
@@ -22,26 +25,28 @@ class ProjectBuilder:
         "tests",
     )
 
-    def __init__(self, output_dir: Path):
+    def __init__(
+        self,
+        output_dir: Path,
+        templates_dir: Path | None = None,
+        renderer: TemplateRenderer | None = None,
+    ):
         self.output_dir = Path(output_dir)
+        self.templates_dir = templates_dir or Path(__file__).resolve().parents[1] / "templates"
+        self.registry = TemplateRegistry(self.templates_dir)
+        self.renderer = renderer or TemplateRenderer()
 
     def build(self, project_name: str) -> Path:
         self._validate_project_name(project_name)
 
         project = self.output_dir / project_name
-        project.mkdir(parents=True, exist_ok=True)
-
-        for folder_name in self.FOLDERS:
-            folder = project / folder_name
-            folder.mkdir(exist_ok=True)
-            (folder / "__init__.py").touch(exist_ok=True)
-
-        (project / "README.md").write_text(
-            "# CAMILO OS\n\nProyecto generado por Camilo Builder.\n",
-            encoding="utf-8",
+        template_dir, manifest = self.registry.resolve("project")
+        return self.renderer.render(
+            template_dir,
+            project,
+            manifest,
+            {"project_name": project_name},
         )
-
-        return project
 
     @staticmethod
     def _validate_project_name(project_name: str) -> None:

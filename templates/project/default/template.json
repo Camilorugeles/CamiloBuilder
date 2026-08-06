@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "component_type": "project",
+  "name": "default",
+  "required_variables": ["project_name"]
+}
