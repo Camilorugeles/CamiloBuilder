@@ -17,9 +17,23 @@ class TemplateRenderer:
         variables: dict[str, str],
     ) -> Path:
         template_dir = Path(template_dir)
+        if template_dir.is_symlink():
+            raise TemplateRenderError("La plantilla no puede contener enlaces simbólicos.")
+        return self.render_files(
+            template_dir / "files", destination, manifest, variables
+        )
+
+    def render_files(
+        self,
+        files_dir: Path,
+        destination: Path,
+        manifest: TemplateManifest,
+        variables: dict[str, str],
+    ) -> Path:
+        files_dir = Path(files_dir)
         destination = Path(destination)
         self._validate_variables(manifest, variables)
-        operations = self._plan(template_dir, destination, variables)
+        operations = self._plan(files_dir, destination, variables)
 
         destination.mkdir(parents=True, exist_ok=True)
         for source_is_dir, target, content in operations:
@@ -35,10 +49,9 @@ class TemplateRenderer:
         return destination
 
     def _plan(
-        self, template_dir: Path, destination: Path, variables: dict[str, str]
+        self, files_dir: Path, destination: Path, variables: dict[str, str]
     ) -> list[tuple[bool, Path, bytes | None]]:
-        files_dir = template_dir / "files"
-        if template_dir.is_symlink() or files_dir.is_symlink():
+        if files_dir.is_symlink():
             raise TemplateRenderError("La plantilla no puede contener enlaces simbólicos.")
         if not files_dir.is_dir():
             raise TemplateRenderError(f"No existe el directorio de archivos: {files_dir}")

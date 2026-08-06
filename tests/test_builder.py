@@ -86,13 +86,19 @@ class ComponentBuilderTests(unittest.TestCase):
             (agent / "README.md").read_text(encoding="utf-8"),
             "# research-agent\n\nAgente de Camilo OS.\n",
         )
+        self.assertEqual(
+            sorted(path.name for path in agent.iterdir()), ["README.md", "__init__.py"]
+        )
 
     def test_department_builder_creates_expected_structure(self):
         department = DepartmentBuilder(self.project).build("operations")
 
         self.assertEqual(department, self.project / "departments" / "operations")
         self.assertTrue((department / "__init__.py").is_file())
-        self.assertTrue((department / "README.md").is_file())
+        self.assertEqual(
+            (department / "README.md").read_text(encoding="utf-8"),
+            "# operations\n\nDepartamento de Camilo OS.\n",
+        )
 
     def test_component_build_is_idempotent_and_preserves_readme(self):
         builder = AgentBuilder(self.project)
@@ -159,6 +165,74 @@ class ComponentBuilderTests(unittest.TestCase):
 
         with self.assertRaises(InvalidTemplate):
             AgentBuilder(self.project, missing).build("assistant")
+        self.assertFalse((self.project / "agents" / "assistant").exists())
+
+    def test_agent_builder_resolves_a_registered_template(self):
+        templates = Path(self.temporary_directory.name) / "registered"
+        template = templates / "agent" / "research"
+        (template / "files").mkdir(parents=True)
+        (template / "template.json").write_text(
+            '{"schema_version": 1, "component_type": "agent", '
+            '"name": "research", "required_variables": ["component_name"]}',
+            encoding="utf-8",
+        )
+        (template / "files" / "profile.txt").write_text(
+            "Research: {{ component_name }}\n", encoding="utf-8"
+        )
+
+        agent = AgentBuilder(
+            self.project, "research", templates_dir=templates
+        ).build("analyst")
+
+        self.assertEqual(
+            (agent / "profile.txt").read_text(encoding="utf-8"),
+            "Research: analyst\n",
+        )
+        self.assertTrue((agent / "__init__.py").is_file())
+
+    def test_existing_external_path_takes_priority_over_registered_name(self):
+        templates = Path(self.temporary_directory.name) / "registered"
+        registered = templates / "agent" / "research"
+        (registered / "files").mkdir(parents=True)
+        (registered / "template.json").write_text(
+            '{"schema_version": 1, "component_type": "agent", '
+            '"name": "research", "required_variables": []}',
+            encoding="utf-8",
+        )
+        (registered / "files" / "source.txt").write_text(
+            "registered\n", encoding="utf-8"
+        )
+        external = Path(self.temporary_directory.name) / "research"
+        external.mkdir()
+        (external / "source.txt").write_text("external\n", encoding="utf-8")
+
+        agent = AgentBuilder(
+            self.project, external, templates_dir=templates
+        ).build("analyst")
+
+        self.assertEqual(
+            (agent / "source.txt").read_text(encoding="utf-8"), "external\n"
+        )
+
+    def test_external_agent_template_preserves_binary_files(self):
+        template = Path(self.temporary_directory.name) / "external-template"
+        template.mkdir()
+        content = b"\xff\x00\x10"
+        (template / "asset.bin").write_bytes(content)
+
+        agent = AgentBuilder(self.project, template).build("assistant")
+
+        self.assertEqual((agent / "asset.bin").read_bytes(), content)
+
+    def test_external_agent_template_rejects_symlinks(self):
+        template = Path(self.temporary_directory.name) / "external-template"
+        template.mkdir()
+        external = Path(self.temporary_directory.name) / "external.txt"
+        external.write_text("secret\n", encoding="utf-8")
+        (template / "linked.txt").symlink_to(external)
+
+        with self.assertRaises(ValueError):
+            AgentBuilder(self.project, template).build("assistant")
         self.assertFalse((self.project / "agents" / "assistant").exists())
 
 
@@ -320,6 +394,50 @@ class CommandLineTests(unittest.TestCase):
                 ),
                 "Agente: assistant\n",
             )
+
+    def test_create_agent_supports_a_registered_template_name(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            ProjectBuilder(root).build("cli-demo")
+
+            result = self.run_builder(
+                "create-agent",
+                "cli-demo",
+                "assistant",
+                "--output",
+                temporary_directory,
+                "--template",
+                "default",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("Agente creado:", result.stdout)
+            self.assertEqual(
+                (root / "cli-demo" / "agents" / "assistant" / "README.md").read_text(
+                    encoding="utf-8"
+                ),
+                "# assistant\n\nAgente de Camilo OS.\n",
+            )
+
+    def test_create_agent_reports_a_missing_external_template_path(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            ProjectBuilder(root).build("cli-demo")
+            missing = root / "missing" / "agent-template"
+
+            result = self.run_builder(
+                "create-agent",
+                "cli-demo",
+                "assistant",
+                "--output",
+                temporary_directory,
+                "--template",
+                str(missing),
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("No existe el directorio de plantilla", result.stderr)
+            self.assertFalse((root / "cli-demo" / "agents" / "assistant").exists())
 
     def test_list_agents_outputs_sorted_names(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

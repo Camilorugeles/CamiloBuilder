@@ -15,6 +15,7 @@ from builders.component_builder import (
 from builders.component_catalog import ComponentCatalog, ComponentNotFound
 from builders.department_builder import DepartmentBuilder
 from builders.project_builder import InvalidProjectName, ProjectBuilder
+from template_system.errors import TemplateError
 
 ROOT = Path(__file__).resolve().parent
 
@@ -46,7 +47,7 @@ def create_component(
     project_name: str,
     component_name: str,
     output: Path | None = None,
-    template: Path | None = None,
+    template: str | Path | None = None,
 ) -> Path:
     output = output or ROOT / "output"
     ProjectBuilder._validate_project_name(project_name)
@@ -126,7 +127,6 @@ def main():
         )
         component_parser.add_argument(
             "--template",
-            type=Path,
             help="Directorio de plantilla para inicializar el componente",
         )
 
@@ -183,6 +183,7 @@ def main():
             InvalidProjectName,
             InvalidTemplate,
             ProjectNotFound,
+            TemplateError,
         ) as error:
             parser.error(str(error))
 

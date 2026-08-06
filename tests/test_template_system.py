@@ -1,3 +1,4 @@
+import contextlib
 import json
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ from template_system.errors import (
 from template_system.manifest import TemplateManifest
 from template_system.registry import TemplateRegistry
 from template_system.renderer import TemplateRenderer
+from template_system.resolver import TemplateResolver
 
 
 class TemplateTestCase(unittest.TestCase):
@@ -112,6 +114,37 @@ class TemplateRegistryTests(TemplateTestCase):
 
         with self.assertRaises(InvalidTemplateManifest):
             TemplateRegistry(self.root / "templates").resolve("agent")
+
+
+class TemplateResolverTests(TemplateTestCase):
+    def test_resolves_default_and_named_registered_templates(self):
+        default = self.make_template()
+        named = self.make_template(name="research")
+        resolver = TemplateResolver(TemplateRegistry(self.root / "templates"))
+
+        self.assertEqual(resolver.resolve("agent").files_dir, default / "files")
+        self.assertEqual(
+            resolver.resolve("agent", "research").files_dir, named / "files"
+        )
+
+    def test_existing_external_directory_has_priority_over_registered_name(self):
+        self.make_template(name="research")
+        external = self.root / "research"
+        external.mkdir()
+        resolver = TemplateResolver(TemplateRegistry(self.root / "templates"))
+
+        with contextlib.chdir(self.root):
+            resolved = resolver.resolve("agent", "research")
+
+        self.assertEqual(resolved.files_dir, Path("research"))
+        self.assertFalse(resolved.registered)
+
+    def test_rejects_missing_path_like_selection_with_clear_error(self):
+        resolver = TemplateResolver(TemplateRegistry(self.root / "templates"))
+        missing = self.root / "missing" / "template"
+
+        with self.assertRaisesRegex(TemplateNotFound, "No existe el directorio"):
+            resolver.resolve("agent", str(missing))
 
 
 class TemplateRendererTests(TemplateTestCase):
