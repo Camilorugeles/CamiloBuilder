@@ -7,6 +7,8 @@ import unittest
 import json
 from pathlib import Path
 
+import builder
+from builder_cli import COMMANDS, COMPONENT_COMMANDS, build_parser
 from builders.agent_builder import AgentBuilder
 from builders.component_builder import (
     InvalidComponentName,
@@ -21,6 +23,104 @@ from builders.templated_component_builder import TemplatedComponentBuilder
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class CommandRegistrationTests(unittest.TestCase):
+    EXPECTED_COMMANDS = (
+        "status",
+        "create-project",
+        "create-agent",
+        "create-department",
+        "create-service",
+        "list-agents",
+        "list-departments",
+        "list-services",
+        "inspect-agent",
+        "inspect-department",
+        "inspect-service",
+        "list-templates",
+        "inspect-template",
+        "validate-template",
+    )
+
+    def test_registry_declares_exactly_the_current_commands_in_order(self):
+        self.assertEqual(
+            tuple(command["name"] for command in COMMANDS),
+            self.EXPECTED_COMMANDS,
+        )
+        self.assertEqual(len({command["name"] for command in COMMANDS}), 14)
+
+    def test_every_command_declares_description_handler_and_builder(self):
+        for command in COMMANDS:
+            with self.subTest(command=command["name"]):
+                self.assertIn("description", command)
+                self.assertIn("handler", command)
+                self.assertIn("builder", command)
+                self.assertTrue(callable(command["handler"]))
+                self.assertTrue(callable(command["configure"]))
+
+    def test_component_commands_declare_the_expected_builders(self):
+        builders_by_command = {
+            command["name"]: command["builder"] for command in COMMANDS
+        }
+        for suffix, builder_class in (
+            ("agent", AgentBuilder),
+            ("department", DepartmentBuilder),
+            ("service", ServiceBuilder),
+        ):
+            with self.subTest(component=suffix):
+                self.assertIs(builders_by_command[f"create-{suffix}"], builder_class)
+                list_name = f"list-{suffix}s" if suffix != "department" else "list-departments"
+                self.assertIs(builders_by_command[list_name], builder_class)
+                self.assertIs(builders_by_command[f"inspect-{suffix}"], builder_class)
+
+    def test_each_component_type_uses_one_declarative_registry_entry(self):
+        self.assertEqual(
+            tuple(component["builder"] for component in COMPONENT_COMMANDS),
+            (AgentBuilder, DepartmentBuilder, ServiceBuilder),
+        )
+        for component in COMPONENT_COMMANDS:
+            with self.subTest(builder=component["builder"].__name__):
+                self.assertEqual(
+                    set(component), {"builder", "create", "list", "inspect"}
+                )
+                for operation in ("create", "list", "inspect"):
+                    self.assertIs(
+                        component[operation]["builder"], component["builder"]
+                    )
+
+    def test_registered_parsers_receive_handlers_and_builders(self):
+        parser = build_parser()
+        for arguments, expected_builder in (
+            (("status",), None),
+            (("create-agent", "demo", "assistant"), AgentBuilder),
+            (("create-department", "demo", "operations"), DepartmentBuilder),
+            (("create-service", "demo", "api"), ServiceBuilder),
+            (("list-services", "demo"), ServiceBuilder),
+            (("inspect-service", "demo", "api"), ServiceBuilder),
+        ):
+            with self.subTest(arguments=arguments):
+                args = parser.parse_args(arguments)
+                self.assertTrue(callable(args.handler))
+                self.assertIs(args.builder, expected_builder)
+
+    def test_builder_module_preserves_the_public_facade(self):
+        for name in (
+            "create_component",
+            "create_project",
+            "get_catalog",
+            "inspect_component",
+            "inspect_service",
+            "inspect_template",
+            "list_components",
+            "list_templates",
+            "main",
+            "status",
+            "template_details",
+            "validate_template",
+        ):
+            with self.subTest(name=name):
+                self.assertTrue(callable(getattr(builder, name)))
 
 
 class TemplatedComponentBuilderStructureTests(unittest.TestCase):
@@ -599,6 +699,28 @@ class CommandLineTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Estado: Operativo", result.stdout)
+
+    def test_no_arguments_prints_help_with_success(self):
+        result = self.run_builder()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertTrue(result.stdout.startswith("usage: builder"))
+
+    def test_help_preserves_command_order(self):
+        result = self.run_builder("--help")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        command_list = "{" + ",".join(CommandRegistrationTests.EXPECTED_COMMANDS) + "}"
+        self.assertIn(command_list, "".join(result.stdout.split()))
+
+    def test_unknown_command_preserves_argparse_error_behavior(self):
+        result = self.run_builder("unknown-command")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, "")
+        self.assertTrue(result.stderr.startswith("usage: builder"))
+        self.assertIn("invalid choice: 'unknown-command'", result.stderr)
 
     def test_create_project_supports_custom_output(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
