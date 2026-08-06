@@ -19,6 +19,16 @@ python3 builder.py create-agent mi-proyecto mi-agente --output /ruta/de/salida
 python3 builder.py create-department mi-proyecto operaciones --output /ruta/de/salida
 ```
 
+Los agentes y departamentos pueden inicializarse desde un directorio de plantilla:
+
+```bash
+python3 builder.py create-agent mi-proyecto mi-agente --template ./plantillas/agente
+```
+
+Los archivos de texto de la plantilla admiten los marcadores
+`{{ component_name }}` y `{{ component_type }}`. Los archivos existentes no se
+sobrescriben al volver a ejecutar el comando.
+
 ## Pruebas
 
 ```bash

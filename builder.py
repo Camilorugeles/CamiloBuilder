@@ -6,7 +6,11 @@ import argparse
 from pathlib import Path
 
 from builders.agent_builder import AgentBuilder
-from builders.component_builder import InvalidComponentName, ProjectNotFound
+from builders.component_builder import (
+    InvalidComponentName,
+    InvalidTemplate,
+    ProjectNotFound,
+)
 from builders.department_builder import DepartmentBuilder
 from builders.project_builder import InvalidProjectName, ProjectBuilder
 
@@ -40,10 +44,11 @@ def create_component(
     project_name: str,
     component_name: str,
     output: Path | None = None,
+    template: Path | None = None,
 ) -> Path:
     output = output or ROOT / "output"
     ProjectBuilder._validate_project_name(project_name)
-    component = builder_class(output / project_name).build(component_name)
+    component = builder_class(output / project_name, template).build(component_name)
 
     print()
     print(f"{builder_class.component_label} creado:")
@@ -81,6 +86,11 @@ def main():
             type=Path,
             help="Directorio que contiene el proyecto (por defecto: ./output)",
         )
+        component_parser.add_argument(
+            "--template",
+            type=Path,
+            help="Directorio de plantilla para inicializar el componente",
+        )
 
     args = parser.parse_args()
 
@@ -98,8 +108,19 @@ def main():
             AgentBuilder if args.cmd == "create-agent" else DepartmentBuilder
         )
         try:
-            create_component(builder_class, args.project, args.name, args.output)
-        except (InvalidComponentName, InvalidProjectName, ProjectNotFound) as error:
+            create_component(
+                builder_class,
+                args.project,
+                args.name,
+                args.output,
+                args.template,
+            )
+        except (
+            InvalidComponentName,
+            InvalidProjectName,
+            InvalidTemplate,
+            ProjectNotFound,
+        ) as error:
             parser.error(str(error))
 
     else:

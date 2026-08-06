@@ -5,7 +5,11 @@ import unittest
 from pathlib import Path
 
 from builders.agent_builder import AgentBuilder
-from builders.component_builder import InvalidComponentName, ProjectNotFound
+from builders.component_builder import (
+    InvalidComponentName,
+    InvalidTemplate,
+    ProjectNotFound,
+)
 from builders.department_builder import DepartmentBuilder
 from builders.project_builder import InvalidProjectName, ProjectBuilder
 
@@ -87,6 +91,50 @@ class ComponentBuilderTests(unittest.TestCase):
 
         with self.assertRaises(ProjectNotFound):
             AgentBuilder(missing).build("assistant")
+
+    def test_component_builder_applies_a_configurable_template(self):
+        template = Path(self.temporary_directory.name) / "template"
+        (template / "config").mkdir(parents=True)
+        (template / "README.md").write_text(
+            "# {{ component_name }}\n\nTipo: {{ component_type }}.\n",
+            encoding="utf-8",
+        )
+        (template / "config" / "settings.json").write_text(
+            '{"name": "{{ component_name }}"}\n', encoding="utf-8"
+        )
+
+        agent = AgentBuilder(self.project, template).build("assistant")
+
+        self.assertEqual(
+            (agent / "README.md").read_text(encoding="utf-8"),
+            "# assistant\n\nTipo: agente.\n",
+        )
+        self.assertEqual(
+            (agent / "config" / "settings.json").read_text(encoding="utf-8"),
+            '{"name": "assistant"}\n',
+        )
+
+    def test_component_template_does_not_overwrite_existing_files(self):
+        template = Path(self.temporary_directory.name) / "template"
+        template.mkdir()
+        (template / "README.md").write_text("Plantilla\n", encoding="utf-8")
+        builder = DepartmentBuilder(self.project, template)
+        department = builder.build("operations")
+        (department / "README.md").write_text("Personalizado\n", encoding="utf-8")
+
+        builder.build("operations")
+
+        self.assertEqual(
+            (department / "README.md").read_text(encoding="utf-8"),
+            "Personalizado\n",
+        )
+
+    def test_component_builder_rejects_a_missing_template(self):
+        missing = Path(self.temporary_directory.name) / "missing-template"
+
+        with self.assertRaises(InvalidTemplate):
+            AgentBuilder(self.project, missing).build("assistant")
+        self.assertFalse((self.project / "agents" / "assistant").exists())
 
 
 class CommandLineTests(unittest.TestCase):
@@ -174,6 +222,34 @@ class CommandLineTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("El nombre debe empezar", result.stderr)
             self.assertFalse((Path(temporary_directory).parent / "outside").exists())
+
+    def test_create_agent_supports_a_template(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            ProjectBuilder(root).build("cli-demo")
+            template = root / "agent-template"
+            template.mkdir()
+            (template / "agent.txt").write_text(
+                "Agente: {{ component_name }}\n", encoding="utf-8"
+            )
+
+            result = self.run_builder(
+                "create-agent",
+                "cli-demo",
+                "assistant",
+                "--output",
+                temporary_directory,
+                "--template",
+                str(template),
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                (root / "cli-demo" / "agents" / "assistant" / "agent.txt").read_text(
+                    encoding="utf-8"
+                ),
+                "Agente: assistant\n",
+            )
 
 
 if __name__ == "__main__":
