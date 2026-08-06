@@ -1,0 +1,181 @@
+{
+  "schema_version": 2,
+  "id": "architecture.camilobuilder",
+  "record_version": "1.0.0",
+  "architecture_version": "1.0.0",
+  "constitution_version": "1.0.0",
+  "status": "active",
+  "contract_ids": [
+    "contract.builder-services",
+    "contract.cli-public-interface",
+    "contract.component-generation-safety",
+    "contract.default-generated-content",
+    "contract.governance-schema",
+    "contract.public-facade",
+    "contract.template-rendering",
+    "contract.template-resolution"
+  ],
+  "modules": [
+    {
+      "id": "module.builders",
+      "paths": [
+        "builders"
+      ],
+      "stability": "stable",
+      "responsibilities": [
+        "Build projects and components",
+        "Catalog generated components",
+        "Preserve idempotence, existing files, and customized content",
+        "Validate component names and destinations"
+      ],
+      "provides_contract_ids": [
+        "contract.builder-services",
+        "contract.component-generation-safety"
+      ],
+      "consumes_contract_ids": [
+        "contract.default-generated-content",
+        "contract.template-rendering",
+        "contract.template-resolution"
+      ],
+      "allowed_dependency_ids": [
+        "module.template-catalog",
+        "module.template-system"
+      ],
+      "prohibited_dependency_ids": [
+        "module.cli",
+        "module.governance",
+        "module.public-facade"
+      ]
+    },
+    {
+      "id": "module.cli",
+      "paths": [
+        "builder_cli.py"
+      ],
+      "stability": "stable",
+      "responsibilities": [
+        "Build the command-line parser",
+        "Coordinate command handlers with builders and template services",
+        "Preserve public messages, JSON, and exit codes",
+        "Register commands declaratively"
+      ],
+      "provides_contract_ids": [
+        "contract.cli-public-interface"
+      ],
+      "consumes_contract_ids": [
+        "contract.builder-services",
+        "contract.component-generation-safety",
+        "contract.template-rendering",
+        "contract.template-resolution"
+      ],
+      "allowed_dependency_ids": [
+        "module.builders",
+        "module.template-system"
+      ],
+      "prohibited_dependency_ids": [
+        "module.governance",
+        "module.public-facade"
+      ]
+    },
+    {
+      "id": "module.governance",
+      "paths": [
+        "governance"
+      ],
+      "stability": "experimental",
+      "responsibilities": [
+        "Define architectural boundaries without participating in execution",
+        "Store constitutional, schema, and governance records"
+      ],
+      "provides_contract_ids": [
+        "contract.governance-schema"
+      ],
+      "consumes_contract_ids": [],
+      "allowed_dependency_ids": [],
+      "prohibited_dependency_ids": [
+        "module.builders",
+        "module.cli",
+        "module.public-facade",
+        "module.template-catalog",
+        "module.template-system"
+      ]
+    },
+    {
+      "id": "module.public-facade",
+      "paths": [
+        "builder.py"
+      ],
+      "stability": "stable",
+      "responsibilities": [
+        "Delegate command-line implementation",
+        "Maintain the public entry point and facade"
+      ],
+      "provides_contract_ids": [
+        "contract.public-facade"
+      ],
+      "consumes_contract_ids": [
+        "contract.cli-public-interface"
+      ],
+      "allowed_dependency_ids": [
+        "module.cli"
+      ],
+      "prohibited_dependency_ids": [
+        "module.builders",
+        "module.governance",
+        "module.template-catalog",
+        "module.template-system"
+      ]
+    },
+    {
+      "id": "module.template-catalog",
+      "paths": [
+        "templates"
+      ],
+      "stability": "stable",
+      "responsibilities": [
+        "Define stable default generated content",
+        "Store integrated declarative template content"
+      ],
+      "provides_contract_ids": [
+        "contract.default-generated-content"
+      ],
+      "consumes_contract_ids": [],
+      "allowed_dependency_ids": [],
+      "prohibited_dependency_ids": [
+        "module.builders",
+        "module.cli",
+        "module.governance",
+        "module.public-facade",
+        "module.template-system"
+      ]
+    },
+    {
+      "id": "module.template-system",
+      "paths": [
+        "template_system"
+      ],
+      "stability": "stable",
+      "responsibilities": [
+        "Apply path, symbolic link, escape, and non-overwrite protections",
+        "Preserve binary files and render text variables",
+        "Register, resolve, and validate templates"
+      ],
+      "provides_contract_ids": [
+        "contract.template-rendering",
+        "contract.template-resolution"
+      ],
+      "consumes_contract_ids": [
+        "contract.default-generated-content"
+      ],
+      "allowed_dependency_ids": [
+        "module.template-catalog"
+      ],
+      "prohibited_dependency_ids": [
+        "module.builders",
+        "module.cli",
+        "module.governance",
+        "module.public-facade"
+      ]
+    }
+  ]
+}

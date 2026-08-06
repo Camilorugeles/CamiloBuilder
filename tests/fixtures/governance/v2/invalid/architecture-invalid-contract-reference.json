@@ -1,0 +1,21 @@
+{
+  "schema_version": 2,
+  "id": "architecture.synthetic",
+  "record_version": "1.0.0",
+  "architecture_version": "1.0.0",
+  "constitution_version": "1.0.0",
+  "status": "active",
+  "contract_ids": ["contract.known"],
+  "modules": [
+    {
+      "id": "module.alpha",
+      "paths": ["builders"],
+      "stability": "stable",
+      "responsibilities": ["Synthetic module"],
+      "provides_contract_ids": ["contract.unknown"],
+      "consumes_contract_ids": [],
+      "allowed_dependency_ids": [],
+      "prohibited_dependency_ids": []
+    }
+  ]
+}
