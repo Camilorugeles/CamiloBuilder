@@ -68,7 +68,7 @@ def create_component(
 
 
 def get_catalog(
-    builder_class: type[AgentBuilder] | type[DepartmentBuilder],
+    builder_class: type[AgentBuilder] | type[DepartmentBuilder] | type[ServiceBuilder],
     project_name: str,
     output: Path | None = None,
 ) -> ComponentCatalog:
@@ -82,7 +82,7 @@ def get_catalog(
 
 
 def list_components(
-    builder_class: type[AgentBuilder] | type[DepartmentBuilder],
+    builder_class: type[AgentBuilder] | type[DepartmentBuilder] | type[ServiceBuilder],
     project_name: str,
     output: Path | None = None,
 ) -> list[str]:
@@ -99,6 +99,22 @@ def inspect_component(
     output: Path | None = None,
 ) -> dict[str, object]:
     details = get_catalog(builder_class, project_name, output).inspect(component_name)
+    print(json.dumps(details, ensure_ascii=False, indent=2))
+    return details
+
+
+def inspect_service(
+    project_name: str,
+    service_name: str,
+    output: Path | None = None,
+) -> dict[str, object]:
+    catalog = get_catalog(ServiceBuilder, project_name, output)
+    catalog_details = catalog.inspect(service_name)
+    details = {
+        "name": catalog_details["name"],
+        "relative_path": str(Path(catalog.component_folder) / service_name),
+        "files": catalog_details["files"],
+    }
     print(json.dumps(details, ensure_ascii=False, indent=2))
     return details
 
@@ -184,6 +200,7 @@ def main():
     for command, help_text in (
         ("list-agents", "Lista los agentes de un proyecto"),
         ("list-departments", "Lista los departamentos de un proyecto"),
+        ("list-services", "Lista los servicios de un proyecto"),
     ):
         list_parser = sub.add_parser(command, help=help_text)
         list_parser.add_argument("project", help="Nombre del proyecto")
@@ -196,6 +213,7 @@ def main():
     for command, help_text in (
         ("inspect-agent", "Muestra los detalles de un agente"),
         ("inspect-department", "Muestra los detalles de un departamento"),
+        ("inspect-service", "Muestra los detalles de un servicio"),
     ):
         inspect_parser = sub.add_parser(command, help=help_text)
         inspect_parser.add_argument("project", help="Nombre del proyecto")
@@ -279,6 +297,12 @@ def main():
         except (InvalidProjectName, ProjectNotFound) as error:
             parser.error(str(error))
 
+    elif args.cmd == "list-services":
+        try:
+            list_components(ServiceBuilder, args.project, args.output)
+        except (InvalidProjectName, ProjectNotFound) as error:
+            parser.error(str(error))
+
     elif args.cmd in {"inspect-agent", "inspect-department"}:
         builder_class = (
             AgentBuilder if args.cmd == "inspect-agent" else DepartmentBuilder
@@ -287,6 +311,12 @@ def main():
             inspect_component(
                 builder_class, args.project, args.name, args.output
             )
+        except (ComponentNotFound, InvalidProjectName, ProjectNotFound) as error:
+            parser.error(str(error))
+
+    elif args.cmd == "inspect-service":
+        try:
+            inspect_service(args.project, args.name, args.output)
         except (ComponentNotFound, InvalidProjectName, ProjectNotFound) as error:
             parser.error(str(error))
 

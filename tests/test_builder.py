@@ -963,6 +963,41 @@ class CommandLineTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout, "")
 
+    def test_list_services_outputs_sorted_names_and_ignores_hidden_directories(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project = ProjectBuilder(Path(temporary_directory)).build("cli-demo")
+            ServiceBuilder(project).build("worker")
+            ServiceBuilder(project).build("api")
+            (project / "services" / ".internal").mkdir()
+
+            result = self.run_builder(
+                "list-services", "cli-demo", "--output", temporary_directory
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "api\nworker\n")
+
+    def test_list_services_supports_an_empty_project(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ProjectBuilder(Path(temporary_directory)).build("cli-demo")
+
+            result = self.run_builder(
+                "list-services", "cli-demo", "--output", temporary_directory
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "")
+
+    def test_list_services_reports_a_missing_project(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            result = self.run_builder(
+                "list-services", "missing", "--output", temporary_directory
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("No existe el proyecto", result.stderr)
+
     def test_inspect_department_outputs_json_details(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             project = ProjectBuilder(Path(temporary_directory)).build("cli-demo")
@@ -981,6 +1016,58 @@ class CommandLineTests(unittest.TestCase):
             self.assertEqual(details["name"], "operations")
             self.assertEqual(details["path"], str(department))
             self.assertEqual(details["files"], ["README.md", "__init__.py"])
+
+    def test_inspect_service_outputs_stable_relative_json_details(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project = ProjectBuilder(Path(temporary_directory)).build("cli-demo")
+            service = ServiceBuilder(project).build("notifications")
+            (service / "config").mkdir()
+            (service / "config" / "settings.json").write_text(
+                "{}\n", encoding="utf-8"
+            )
+            (service / "custom.txt").write_text("custom\n", encoding="utf-8")
+
+            result = self.run_builder(
+                "inspect-service",
+                "cli-demo",
+                "notifications",
+                "--output",
+                temporary_directory,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                result.stdout,
+                '{\n'
+                '  "name": "notifications",\n'
+                '  "relative_path": "services/notifications",\n'
+                '  "files": [\n'
+                '    "README.md",\n'
+                '    "__init__.py",\n'
+                '    "config/settings.json",\n'
+                '    "custom.txt"\n'
+                '  ]\n'
+                '}\n',
+            )
+            details = json.loads(result.stdout)
+            self.assertNotIn("path", details)
+            self.assertNotIn(str(Path(temporary_directory)), result.stdout)
+
+    def test_inspect_service_reports_a_missing_service(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ProjectBuilder(Path(temporary_directory)).build("cli-demo")
+
+            result = self.run_builder(
+                "inspect-service",
+                "cli-demo",
+                "missing",
+                "--output",
+                temporary_directory,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("No existe el servicio", result.stderr)
 
     def test_inspect_agent_reports_a_missing_component(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

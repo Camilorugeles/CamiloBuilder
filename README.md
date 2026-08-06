@@ -14,6 +14,8 @@ python3 builder.py list-agents mi-proyecto
 python3 builder.py list-departments mi-proyecto
 python3 builder.py inspect-agent mi-proyecto mi-agente
 python3 builder.py inspect-department mi-proyecto operaciones
+python3 builder.py list-services mi-proyecto
+python3 builder.py inspect-service mi-proyecto notificaciones
 python3 builder.py list-templates
 python3 builder.py list-templates --type agent
 python3 builder.py inspect-template default --type agent
