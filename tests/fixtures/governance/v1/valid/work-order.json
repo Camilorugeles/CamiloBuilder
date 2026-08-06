@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "work-009",
+  "record_version": "1.0.0",
+  "title": "Establish CamiloBuilder Constitution",
+  "status": "implemented",
+  "created_at": "2026-08-06T12:00:00Z",
+  "contract_change": "creates",
+  "component_ids": ["governance.constitution"],
+  "dependency_ids": [],
+  "risks": ["Governance may become too rigid"],
+  "commits": ["ac2f00def074e5bee7c50753e9bc9af82b655bd2"],
+  "tests": [
+    {
+      "command": "python3 -m unittest discover -v",
+      "result": "passed"
+    }
+  ],
+  "reversal": "Revert the implementation commit",
+  "constitution_version": "1.0.0"
+}

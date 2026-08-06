@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://camilobuilder.dev/governance/schemas/v1/work-order.schema.json",
+  "title": "CamiloBuilder Work Order record schema v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "record_version", "title", "status", "created_at", "contract_change", "component_ids", "dependency_ids", "risks"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "$ref": "#/$defs/id" },
+    "record_version": { "$ref": "#/$defs/semver" },
+    "title": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["proposed", "approved", "in_progress", "implemented", "published", "reverted", "cancelled"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "contract_change": { "enum": ["creates", "modifies", "deprecates", "removes", "none"] },
+    "component_ids": { "$ref": "#/$defs/ids" },
+    "dependency_ids": { "$ref": "#/$defs/ids" },
+    "risks": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "commits": { "type": "array", "items": { "$ref": "#/$defs/commit" }, "uniqueItems": true },
+    "tests": { "type": "array", "items": { "$ref": "#/$defs/test" } },
+    "reversal": { "type": "string", "minLength": 1 },
+    "exception_ids": { "$ref": "#/$defs/ids" },
+    "constitution_version": { "$ref": "#/$defs/semver" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "enum": ["implemented", "published"] } }, "required": ["status"] },
+      "then": {
+        "required": ["commits", "tests", "reversal"],
+        "properties": {
+          "commits": { "minItems": 1 },
+          "tests": { "minItems": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$" },
+    "semver": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$" },
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "ids": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+    "test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "result"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "result": { "enum": ["passed", "failed"] }
+      }
+    }
+  }
+}

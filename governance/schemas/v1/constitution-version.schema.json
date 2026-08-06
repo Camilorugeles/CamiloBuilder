@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://camilobuilder.dev/governance/schemas/v1/constitution-version.schema.json",
+  "title": "CamiloBuilder constitutional version record schema v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "record_version", "constitution_version", "status", "work_order_id", "commit", "effective_at", "amendment_level", "document_path"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "$ref": "#/$defs/id" },
+    "record_version": { "$ref": "#/$defs/semver" },
+    "constitution_version": { "$ref": "#/$defs/semver" },
+    "status": { "enum": ["proposed", "effective", "superseded"] },
+    "work_order_id": { "$ref": "#/$defs/id" },
+    "commit": { "$ref": "#/$defs/commit" },
+    "effective_at": { "type": "string", "format": "date-time" },
+    "amendment_level": { "enum": ["E0", "E1", "E2", "E3"] },
+    "document_path": { "const": "governance/CONSTITUTION.md" },
+    "supersedes_id": { "$ref": "#/$defs/id" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$" },
+    "semver": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$" },
+    "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+  }
+}

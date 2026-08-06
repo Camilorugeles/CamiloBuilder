@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "exception.synthetic-example",
+  "record_version": "1.0.0",
+  "status": "active",
+  "constitutional_rule": "Principle of Architecture Viva",
+  "justification": "Synthetic fixture for schema validation",
+  "scope": "Fixture only",
+  "affected_component_ids": ["governance.audit"],
+  "affected_contract_ids": [],
+  "risks": ["Delayed automated audit"],
+  "compensating_controls": ["Manual review"],
+  "owner": "CamiloBuilder maintainers",
+  "approval_ids": ["approval.synthetic-review"],
+  "starts_at": "2026-08-06T12:00:00Z",
+  "expires_at": "2026-08-20T12:00:00Z",
+  "remediation_work_order_id": "work-010",
+  "closure_criteria": "Automated audit available",
+  "reversal": "Remove the temporary exception"
+}
