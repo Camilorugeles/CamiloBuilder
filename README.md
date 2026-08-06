@@ -9,6 +9,10 @@ python3 builder.py status
 python3 builder.py create-project mi-proyecto
 python3 builder.py create-agent mi-proyecto mi-agente
 python3 builder.py create-department mi-proyecto operaciones
+python3 builder.py list-agents mi-proyecto
+python3 builder.py list-departments mi-proyecto
+python3 builder.py inspect-agent mi-proyecto mi-agente
+python3 builder.py inspect-department mi-proyecto operaciones
 ```
 
 Los comandos crean o amplían proyectos dentro de `output/`. Para elegir otro destino:
@@ -28,6 +32,10 @@ python3 builder.py create-agent mi-proyecto mi-agente --template ./plantillas/ag
 Los archivos de texto de la plantilla admiten los marcadores
 `{{ component_name }}` y `{{ component_type }}`. Los archivos existentes no se
 sobrescriben al volver a ejecutar el comando.
+
+Los comandos `list-agents` y `list-departments` imprimen los nombres ordenados.
+Los comandos `inspect-agent` e `inspect-department` devuelven JSON con el nombre,
+tipo, ruta y archivos del componente.
 
 ## Pruebas
 

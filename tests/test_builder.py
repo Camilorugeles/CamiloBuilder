@@ -2,6 +2,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
 from builders.agent_builder import AgentBuilder
@@ -10,6 +11,7 @@ from builders.component_builder import (
     InvalidTemplate,
     ProjectNotFound,
 )
+from builders.component_catalog import ComponentCatalog, ComponentNotFound
 from builders.department_builder import DepartmentBuilder
 from builders.project_builder import InvalidProjectName, ProjectBuilder
 
@@ -137,6 +139,43 @@ class ComponentBuilderTests(unittest.TestCase):
         self.assertFalse((self.project / "agents" / "assistant").exists())
 
 
+class ComponentCatalogTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.project = ProjectBuilder(Path(self.temporary_directory.name)).build("demo")
+
+    def tearDown(self):
+        self.temporary_directory.cleanup()
+
+    def test_list_names_returns_sorted_components(self):
+        AgentBuilder(self.project).build("writer")
+        AgentBuilder(self.project).build("analyst")
+        catalog = ComponentCatalog(self.project, "agents", "Agente")
+
+        self.assertEqual(catalog.list_names(), ["analyst", "writer"])
+
+    def test_inspect_returns_component_details(self):
+        agent = AgentBuilder(self.project).build("assistant")
+        (agent / "config").mkdir()
+        (agent / "config" / "settings.json").write_text("{}\n", encoding="utf-8")
+        catalog = ComponentCatalog(self.project, "agents", "Agente")
+
+        details = catalog.inspect("assistant")
+
+        self.assertEqual(details["name"], "assistant")
+        self.assertEqual(details["type"], "agente")
+        self.assertEqual(details["path"], str(agent))
+        self.assertEqual(
+            details["files"], ["README.md", "__init__.py", "config/settings.json"]
+        )
+
+    def test_inspect_rejects_a_missing_component(self):
+        catalog = ComponentCatalog(self.project, "departments", "Departamento")
+
+        with self.assertRaises(ComponentNotFound):
+            catalog.inspect("missing")
+
+
 class CommandLineTests(unittest.TestCase):
     def run_builder(self, *arguments):
         return subprocess.run(
@@ -250,6 +289,64 @@ class CommandLineTests(unittest.TestCase):
                 ),
                 "Agente: assistant\n",
             )
+
+    def test_list_agents_outputs_sorted_names(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project = ProjectBuilder(Path(temporary_directory)).build("cli-demo")
+            AgentBuilder(project).build("writer")
+            AgentBuilder(project).build("analyst")
+
+            result = self.run_builder(
+                "list-agents", "cli-demo", "--output", temporary_directory
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.splitlines(), ["analyst", "writer"])
+
+    def test_list_departments_supports_an_empty_project(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ProjectBuilder(Path(temporary_directory)).build("cli-demo")
+
+            result = self.run_builder(
+                "list-departments", "cli-demo", "--output", temporary_directory
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "")
+
+    def test_inspect_department_outputs_json_details(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            project = ProjectBuilder(Path(temporary_directory)).build("cli-demo")
+            department = DepartmentBuilder(project).build("operations")
+
+            result = self.run_builder(
+                "inspect-department",
+                "cli-demo",
+                "operations",
+                "--output",
+                temporary_directory,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            details = json.loads(result.stdout)
+            self.assertEqual(details["name"], "operations")
+            self.assertEqual(details["path"], str(department))
+            self.assertEqual(details["files"], ["README.md", "__init__.py"])
+
+    def test_inspect_agent_reports_a_missing_component(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            ProjectBuilder(Path(temporary_directory)).build("cli-demo")
+
+            result = self.run_builder(
+                "inspect-agent",
+                "cli-demo",
+                "missing",
+                "--output",
+                temporary_directory,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("No existe el agente", result.stderr)
 
 
 if __name__ == "__main__":
