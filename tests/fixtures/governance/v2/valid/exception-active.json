@@ -1,0 +1,28 @@
+{
+  "schema_version": 2,
+  "id": "EXCEPTION-999",
+  "record_version": "1.0.0",
+  "status": "active",
+  "conformance_status": "temporarily_authorized",
+  "constitution_version": "1.0.0",
+  "constitutional_provision": "principle.failure-safe",
+  "justification": "Synthetic active exception fixture",
+  "scope": "Synthetic fixture only",
+  "creates_precedent": false,
+  "approval_policy": "critical",
+  "owner_id": "governance.architect",
+  "approval_ids": ["approval.synthetic-architect", "approval.synthetic-independent"],
+  "starts_at": "2026-01-01T10:00:00Z",
+  "expires_at": "2026-01-15T10:00:00Z",
+  "remediation_work_order_id": "WORK-009",
+  "affected_component_ids": ["governance.synthetic-component"],
+  "affected_contract_ids": ["contract.governance-schema"],
+  "affected_capability_ids": [],
+  "risks": ["Synthetic risk"],
+  "compensating_controls": ["Synthetic compensating control"],
+  "closure_criteria": "Synthetic remediation is complete",
+  "reversal": "Remove the synthetic exception",
+  "status_history": [
+    {"from": "proposed", "to": "active", "at": "2026-01-01T10:00:00Z"}
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": 2, "id": "EXCEPTION-999", "record_version": "1.0.0",
+  "status": "active", "conformance_status": "temporarily_authorized",
+  "constitution_version": "1.0.0", "constitutional_provision": "principle.architecture-live",
+  "justification": "Synthetic", "scope": "Fixture", "creates_precedent": false,
+  "approval_policy": "ordinary", "owner_id": "governance.architect", "approval_ids": ["approval.synthetic"],
+  "starts_at": "2026-01-01T10:00:00Z", "expires_at": "2026-01-15T10:00:00Z",
+  "affected_component_ids": [], "affected_contract_ids": ["contract.governance-schema"],
+  "affected_capability_ids": [], "risks": ["Risk"], "compensating_controls": ["Control"],
+  "closure_criteria": "Done", "reversal": "Revert",
+  "status_history": [{"from": "proposed", "to": "active", "at": "2026-01-01T10:00:00Z"}]
+}
