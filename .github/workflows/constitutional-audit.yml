@@ -1,0 +1,184 @@
+name: Constitutional Audit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Branch protection is external to this workflow. The check produced here is:
+# Constitutional Audit / constitutional-audit
+jobs:
+  constitutional-audit:
+    name: constitutional-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Verify initial clean tree
+        run: |
+          git diff --exit-code
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Install development dependencies
+        run: python3 -m pip install --requirement requirements-dev.txt
+
+      - name: Capture CI evaluation instant
+        shell: bash
+        run: |
+          audit_evaluation_instant="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          printf 'AUDIT_EVALUATION_INSTANT=%s\n' \
+            "$audit_evaluation_instant" >> "$GITHUB_ENV"
+
+      - name: Run complete test suite
+        run: python3 -m unittest discover -v
+
+      - name: Compile Python sources
+        run: |
+          python3 -m compileall -q \
+            builder.py \
+            builder_cli.py \
+            builders \
+            template_system \
+            capability_introspection \
+            constitutional_audit \
+            tests
+
+      - name: Check whitespace
+        run: git diff --check
+
+      - name: Validate governance schemas
+        run: |
+          python3 -m unittest -v \
+            tests.test_governance_schemas \
+            tests.test_constitutional_audit.AuditReportSchemaTests
+
+      - name: Run constitutional audit
+        env:
+          AUDIT_EVALUATION_INSTANT: ${{ env.AUDIT_EVALUATION_INSTANT }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          from datetime import datetime
+
+          raw_instant = os.environ.get("AUDIT_EVALUATION_INSTANT", "")
+          try:
+              from constitutional_audit import audit_camilobuilder
+
+              instant = datetime.fromisoformat(raw_instant.replace("Z", "+00:00"))
+              report = audit_camilobuilder(evaluation_instant=instant)
+              findings = report["findings"]
+              active_ids = report["active_exception_ids"]
+              controls = report["controls"]
+              calculated_summary = {
+                  "passed": sum(item["status"] == "passed" for item in controls),
+                  "failed": sum(item["status"] == "failed" for item in controls),
+                  "excepted": sum(item["status"] == "excepted" for item in controls),
+                  "indeterminate": sum(
+                      item["status"] == "indeterminate" for item in controls
+                  ),
+              }
+              material_failures = [
+                  item for item in findings
+                  if item["outcome"] == "failed"
+                  and item["severity"] in {"critical", "error"}
+              ]
+              material_control_failures = [
+                  item for item in controls
+                  if item["status"] == "failed"
+                  and item["severity"] in {"critical", "error"}
+              ]
+              indeterminate_findings = [
+                  item for item in findings if item["outcome"] == "indeterminate"
+              ]
+              indeterminate_controls = [
+                  item for item in controls if item["status"] == "indeterminate"
+              ]
+              excepted_findings = [
+                  item for item in findings if item["outcome"] == "excepted"
+              ]
+              invalid_exception_links = [
+                  item for item in excepted_findings
+                  if item["exception_id"] not in active_ids
+              ]
+              expired_findings = [
+                  item for item in findings
+                  if item["code"] in {
+                      "active-exception-expired",
+                      "expired-exception",
+                  }
+              ]
+              internally_consistent = report["summary"] == calculated_summary
+              accepted = (
+                  report["result"] == "compliant"
+                  and not material_failures
+                  and not material_control_failures
+                  and not indeterminate_findings
+                  and not indeterminate_controls
+                  and not excepted_findings
+                  and internally_consistent
+              )
+              if report["result"] == "compliant_with_exceptions":
+                  accepted = (
+                      bool(active_ids)
+                      and bool(excepted_findings)
+                      and not material_failures
+                      and not material_control_failures
+                      and not indeterminate_findings
+                      and not indeterminate_controls
+                      and not invalid_exception_links
+                      and not expired_findings
+                      and internally_consistent
+                  )
+              diagnostic = {
+                  "active_exception_ids": active_ids,
+                  "evaluation_instant": report["evaluation_instant"],
+                  "findings": findings,
+                  "result": report["result"],
+                  "summary": report["summary"],
+              }
+          except Exception:
+              accepted = False
+              diagnostic = {
+                  "active_exception_ids": [],
+                  "evaluation_instant": raw_instant,
+                  "findings": [],
+                  "result": "indeterminate",
+                  "summary": {
+                      "excepted": 0,
+                      "failed": 0,
+                      "indeterminate": 1,
+                      "passed": 0,
+                  },
+              }
+
+          print(json.dumps(
+              diagnostic,
+              ensure_ascii=True,
+              sort_keys=True,
+              separators=(",", ":"),
+          ))
+          if not accepted:
+              sys.exit(1)
+          PY
+
+      - name: Verify final clean tree
+        run: |
+          git diff --exit-code
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
