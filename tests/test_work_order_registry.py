@@ -29,6 +29,7 @@ IMPLEMENTATION_COMMITS = [
     "c7031e5d858ab7130981287e017784727415a12a",
     "90cf95cb6062a4d7213c60380c23f15163fdc43c",
     "078c719a959e1f1a56f6289dde336850f68af237",
+    "8ad36b81a95787cc25468387bbbce695e79bcbed",
 ]
 INDEX_FIELDS = {"id", "title", "status", "path"}
 TERMINAL_STATES = {"cancelled", "reverted"}

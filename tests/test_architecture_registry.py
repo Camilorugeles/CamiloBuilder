@@ -168,6 +168,7 @@ def internal_static_dependencies(document):
         "builder": "module.public-facade",
         "builder_cli": "module.cli",
         "builders": "module.builders",
+        "capability_introspection": "module.capability-introspection",
         "template_system": "module.template-system",
     }
     observed = {module["id"]: set() for module in document["modules"]}
@@ -257,8 +258,8 @@ class ArchitectureRegistryTests(unittest.TestCase):
 
     def test_registry_versions_are_the_governed_initial_versions(self):
         self.assertEqual(self.registry["schema_version"], 2)
-        self.assertEqual(self.registry["record_version"], "1.0.0")
-        self.assertEqual(self.registry["architecture_version"], "1.0.0")
+        self.assertEqual(self.registry["record_version"], "1.1.0")
+        self.assertEqual(self.registry["architecture_version"], "1.1.0")
         self.assertEqual(self.registry["constitution_version"], "1.0.0")
 
     def test_registry_contains_no_derived_inventories(self):
@@ -276,6 +277,13 @@ class ArchitectureRegistryTests(unittest.TestCase):
         modules = {module["id"]: module for module in self.registry["modules"]}
         expected_allowed = {
             "module.public-facade": {"module.cli"},
+            "module.capability-introspection": {
+                "module.builders",
+                "module.cli",
+                "module.governance",
+                "module.template-catalog",
+                "module.template-system",
+            },
             "module.cli": {"module.builders", "module.template-system"},
             "module.builders": {"module.template-catalog", "module.template-system"},
             "module.template-system": {"module.template-catalog"},
@@ -296,8 +304,22 @@ class ArchitectureRegistryTests(unittest.TestCase):
         self.assertEqual(modules["module.template-catalog"]["consumes_contract_ids"], [])
         self.assertEqual(modules["module.governance"]["allowed_dependency_ids"], [])
         for name, module in modules.items():
-            if name != "module.governance":
+            if name not in {"module.governance", "module.capability-introspection"}:
                 self.assertNotIn("module.governance", module["allowed_dependency_ids"])
+        self.assertEqual(
+            modules["module.capability-introspection"]["provides_contract_ids"],
+            ["contract.capability-introspection"],
+        )
+        self.assertNotIn("contract.builder-services", self.registry["contract_ids"])
+        self.assertNotIn(
+            "contract.builder-public-api",
+            modules["module.capability-introspection"]["consumes_contract_ids"],
+        )
+        for name, module in modules.items():
+            if name != "module.capability-introspection":
+                self.assertNotIn(
+                    "module.capability-introspection", module["allowed_dependency_ids"]
+                )
 
     def test_static_ast_analysis_is_limited_and_finds_no_prohibited_imports(self):
         self.assertIn("non-exhaustive", AST_ANALYSIS_SCOPE)

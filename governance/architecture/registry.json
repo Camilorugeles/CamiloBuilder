@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
   "id": "architecture.camilobuilder",
-  "record_version": "1.0.0",
-  "architecture_version": "1.0.0",
+  "record_version": "1.1.0",
+  "architecture_version": "1.1.0",
   "constitution_version": "1.0.0",
   "status": "active",
   "contract_ids": [
-    "contract.builder-services",
+    "contract.capability-introspection",
     "contract.cli-public-interface",
     "contract.component-generation-safety",
     "contract.default-generated-content",
@@ -29,7 +29,6 @@
         "Validate component names and destinations"
       ],
       "provides_contract_ids": [
-        "contract.builder-services",
         "contract.component-generation-safety"
       ],
       "consumes_contract_ids": [
@@ -42,8 +41,39 @@
         "module.template-system"
       ],
       "prohibited_dependency_ids": [
+        "module.capability-introspection",
         "module.cli",
         "module.governance",
+        "module.public-facade"
+      ]
+    },
+    {
+      "id": "module.capability-introspection",
+      "paths": [
+        "capability_introspection"
+      ],
+      "stability": "experimental",
+      "responsibilities": [
+        "Derive deterministic self-knowledge from executable and governed canonical sources",
+        "Read governance records without writing, migrating, or changing their state"
+      ],
+      "provides_contract_ids": [
+        "contract.capability-introspection"
+      ],
+      "consumes_contract_ids": [
+        "contract.cli-public-interface",
+        "contract.default-generated-content",
+        "contract.governance-schema",
+        "contract.template-resolution"
+      ],
+      "allowed_dependency_ids": [
+        "module.builders",
+        "module.cli",
+        "module.governance",
+        "module.template-catalog",
+        "module.template-system"
+      ],
+      "prohibited_dependency_ids": [
         "module.public-facade"
       ]
     },
@@ -63,7 +93,6 @@
         "contract.cli-public-interface"
       ],
       "consumes_contract_ids": [
-        "contract.builder-services",
         "contract.component-generation-safety",
         "contract.template-rendering",
         "contract.template-resolution"
@@ -73,6 +102,7 @@
         "module.template-system"
       ],
       "prohibited_dependency_ids": [
+        "module.capability-introspection",
         "module.governance",
         "module.public-facade"
       ]
@@ -94,6 +124,7 @@
       "allowed_dependency_ids": [],
       "prohibited_dependency_ids": [
         "module.builders",
+        "module.capability-introspection",
         "module.cli",
         "module.public-facade",
         "module.template-catalog",
@@ -121,6 +152,7 @@
       ],
       "prohibited_dependency_ids": [
         "module.builders",
+        "module.capability-introspection",
         "module.governance",
         "module.template-catalog",
         "module.template-system"
@@ -143,6 +175,7 @@
       "allowed_dependency_ids": [],
       "prohibited_dependency_ids": [
         "module.builders",
+        "module.capability-introspection",
         "module.cli",
         "module.governance",
         "module.public-facade",
@@ -172,6 +205,7 @@
       ],
       "prohibited_dependency_ids": [
         "module.builders",
+        "module.capability-introspection",
         "module.cli",
         "module.governance",
         "module.public-facade"

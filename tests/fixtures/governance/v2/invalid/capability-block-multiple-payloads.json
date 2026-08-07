@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "report_version": "1.0.0",
+  "identity": {"classification": "normative_declared", "source": "synthetic architecture", "value": {"id": "architecture.synthetic"}},
+  "constitution_version": {"classification": "normative_declared", "source": "synthetic constitution", "value": "1.0.0"},
+  "architecture_version": {"classification": "normative_declared", "source": "synthetic architecture", "value": "1.1.0"},
+  "commands": {"classification": "executable_derived", "source": "synthetic commands", "items": [], "value": []},
+  "builders": {"classification": "executable_derived", "source": "synthetic builders", "items": []},
+  "component_types": {"classification": "executable_derived", "source": "synthetic types", "items": []},
+  "templates": {"classification": "executable_derived", "source": "synthetic templates", "items": []},
+  "contracts": {"classification": "normative_declared", "source": "synthetic contracts", "items": []},
+  "architectural_dependencies": {"classification": "normative_declared", "source": "synthetic dependencies", "items": []},
+  "work_orders": {"classification": "normative_declared", "source": "synthetic work orders", "items": []},
+  "active_exceptions": {"classification": "normative_declared", "source": "synthetic exceptions", "items": []},
+  "limitations": {"classification": "observed_state", "source": "synthetic checks", "items": []}
+}

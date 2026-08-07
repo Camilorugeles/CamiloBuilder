@@ -372,6 +372,18 @@ COMPONENT_COMMANDS = (
 )
 
 
+BUILDER_METADATA = (
+    {"builder": ProjectBuilder, "component_type": "project"},
+    *(
+        {
+            "builder": component["builder"],
+            "component_type": component["builder"].component_type,
+        }
+        for component in COMPONENT_COMMANDS
+    ),
+)
+
+
 COMMANDS = (
     {
         "name": "status",

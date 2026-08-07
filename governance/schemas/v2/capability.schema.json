@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://camilobuilder.dev/governance/schemas/v2/capability.schema.json",
+  "title": "CamiloBuilder aggregate capability introspection report schema v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_version",
+    "identity",
+    "constitution_version",
+    "architecture_version",
+    "commands",
+    "builders",
+    "component_types",
+    "templates",
+    "contracts",
+    "architectural_dependencies",
+    "work_orders",
+    "active_exceptions",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "report_version": { "$ref": "#/$defs/semver" },
+    "identity": { "$ref": "#/$defs/identityBlock" },
+    "constitution_version": { "$ref": "#/$defs/versionBlock" },
+    "architecture_version": { "$ref": "#/$defs/versionBlock" },
+    "commands": { "$ref": "#/$defs/commandsBlock" },
+    "builders": { "$ref": "#/$defs/buildersBlock" },
+    "component_types": { "$ref": "#/$defs/stringsBlock" },
+    "templates": { "$ref": "#/$defs/templatesBlock" },
+    "contracts": { "$ref": "#/$defs/stringsBlock" },
+    "architectural_dependencies": { "$ref": "#/$defs/dependenciesBlock" },
+    "work_orders": { "$ref": "#/$defs/workOrdersBlock" },
+    "active_exceptions": { "$ref": "#/$defs/exceptionsBlock" },
+    "limitations": { "$ref": "#/$defs/limitationsBlock" }
+  },
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "classification": {
+      "enum": ["executable_derived", "normative_declared", "observed_state"]
+    },
+    "source": { "type": "string", "minLength": 1 },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9]*(?:[._-][A-Za-z0-9]+)*$"
+    },
+    "identityBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "source", "value"],
+      "properties": {
+        "classification": { "const": "normative_declared" },
+        "source": { "$ref": "#/$defs/source" },
+        "value": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id"],
+          "properties": { "id": { "$ref": "#/$defs/id" } }
+        }
+      }
+    },
+    "versionBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "source", "value"],
+      "properties": {
+        "classification": { "const": "normative_declared" },
+        "source": { "$ref": "#/$defs/source" },
+        "value": { "$ref": "#/$defs/semver" }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": ["string", "null"] }
+      }
+    },
+    "commandsBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "source", "items"],
+      "properties": {
+        "classification": { "const": "executable_derived" },
+        "source": { "$ref": "#/$defs/source" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/command" }, "uniqueItems": true }
+      }
+    },
+    "builder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "name", "component_type"],
+      "properties": {
+        "module": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "component_type": { "type": "string", "minLength": 1 }
+      }
+    },
+    "buildersBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "source", "items"],
+      "properties": {
+        "classification": { "const": "executable_derived" },
+        "source": { "$ref": "#/$defs/source" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/builder" }, "uniqueItems": true }
+      }
+    },
+    "stringsBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "source", "items"],
+      "properties": {
+        "classification": { "enum": ["executable_derived", "normative_declared"] },
+        "source": { "$ref": "#/$defs/source" },
+        "items": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component_type", "name", "schema_version", "description", "required_variables"],
+      "properties": {
+        "component_type": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "schema_version": { "type": "integer", "minimum": 1 },
+        "description": { "type": "string" },
+        "required_variables": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    "templatesBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "source", "items"],
+      "properties": {
+        "classification": { "const": "executable_derived" },
+        "source": { "$ref": "#/$defs/source" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/template" }, "uniqueItems": true }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module_id", "allowed_dependency_ids", "prohibited_dependency_ids"],
+      "properties": {
+        "module_id": { "$ref": "#/$defs/id" },
+        "allowed_dependency_ids": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true },
+        "prohibited_dependency_ids": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
+      }
+    },
+    "dependenciesBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "source", "items"],
+      "properties": {
+        "classification": { "const": "normative_declared" },
+        "source": { "$ref": "#/$defs/source" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/dependency" }, "uniqueItems": true }
+      }
+    },
+    "workOrder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "status", "path"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^WORK-[0-9]{3}$" },
+        "title": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "workOrdersBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "source", "items"],
+      "properties": {
+        "classification": { "const": "normative_declared" },
+        "source": { "$ref": "#/$defs/source" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/workOrder" }, "uniqueItems": true }
+      }
+    },
+    "exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "path"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^EXCEPTION-[0-9]{3}$" },
+        "status": { "const": "active" },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "exceptionsBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "source", "items"],
+      "properties": {
+        "classification": { "const": "normative_declared" },
+        "source": { "$ref": "#/$defs/source" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/exception" }, "uniqueItems": true }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "operation", "target", "result"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "operation": { "enum": ["module_id_exists", "path_exists"] },
+        "target": { "type": "string", "minLength": 1 },
+        "result": { "const": "absent" }
+      }
+    },
+    "limitationsBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classification", "source", "items"],
+      "properties": {
+        "classification": { "const": "observed_state" },
+        "source": { "$ref": "#/$defs/source" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/observation" }, "uniqueItems": true }
+      }
+    }
+  }
+}
