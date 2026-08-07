@@ -13,7 +13,7 @@ POLICY_PATH = ROOT / "governance" / "GOVERNANCE.md"
 CONSTITUTION_PATH = ROOT / "governance" / "CONSTITUTION.md"
 ARCHITECTURE_PATH = ROOT / "governance" / "architecture" / "registry.json"
 WORK_ORDER_PATH = ROOT / "governance" / "work-orders" / "WORK-009.json"
-BLOCK_8_COMMIT = "b586e24e680ca4a081b512f48858a247fe77ed2c"
+PUBLISHED_POLICY_COMMIT = "a1e6e842cfdf653452c72a0de9ec7f14aa8aecdc"
 EVALUATION_INSTANT = datetime.fromisoformat("2026-08-07T17:45:00+00:00")
 
 
@@ -149,9 +149,9 @@ class GovernancePolicyTests(unittest.TestCase):
 
     def test_work_order_traceability_has_no_self_reference(self):
         commits = self.work_order["implementation_commit_ids"]
-        self.assertEqual(commits[-1], BLOCK_8_COMMIT)
-        self.assertEqual(commits.count(BLOCK_8_COMMIT), 1)
-        self.assertEqual(self.work_order["status"], "in_progress")
+        self.assertEqual(commits[-1], PUBLISHED_POLICY_COMMIT)
+        self.assertEqual(commits.count(PUBLISHED_POLICY_COMMIT), 1)
+        self.assertEqual(self.work_order["status"], "completed")
         self.assertNotIn("registry_closure_commit_id", self.work_order)
 
     def test_policy_has_no_derived_inventories_or_concrete_records(self):

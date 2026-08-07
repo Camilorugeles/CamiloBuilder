@@ -218,7 +218,7 @@ class ExceptionRegistryTests(unittest.TestCase):
 
     def test_work_order_traceability_adds_only_the_previously_published_commit(self):
         work_order = load_json(WORK_ORDER_PATH)
-        self.assertEqual(work_order["status"], "in_progress")
+        self.assertEqual(work_order["status"], "completed")
         self.assertEqual(
             work_order["implementation_commit_ids"],
             [
@@ -230,6 +230,7 @@ class ExceptionRegistryTests(unittest.TestCase):
                 "38636518f5638a8c06da9d3366f551cc1cb90f5a",
                 "82f9d9985c97ca514fea20e907005525e27f306f",
                 "b586e24e680ca4a081b512f48858a247fe77ed2c",
+                "a1e6e842cfdf653452c72a0de9ec7f14aa8aecdc",
             ],
         )
         self.assertNotIn("registry_closure_commit_id", work_order)

@@ -3,16 +3,23 @@
   "id": "WORK-009",
   "record_version": "1.0.0",
   "title": "Establish CamiloBuilder Constitution",
-  "status": "in_progress",
+  "status": "completed",
   "created_at": "2026-08-06T17:56:11+02:00",
   "contract_change": "creates",
   "constitution_version": "1.0.0",
   "affected_component_ids": [
     "governance.architecture-registry",
     "governance.constitution",
-    "governance.schemas"
+    "governance.schemas",
+    "module.capability-introspection",
+    "module.cli",
+    "module.constitutional-audit",
+    "module.governance"
   ],
   "affected_contract_ids": [
+    "contract.capability-introspection",
+    "contract.constitutional-audit",
+    "contract.governance-policy",
     "contract.governance-schema"
   ],
   "affected_capability_ids": [],
@@ -25,17 +32,43 @@
     "8ad36b81a95787cc25468387bbbce695e79bcbed",
     "38636518f5638a8c06da9d3366f551cc1cb90f5a",
     "82f9d9985c97ca514fea20e907005525e27f306f",
-    "b586e24e680ca4a081b512f48858a247fe77ed2c"
+    "b586e24e680ca4a081b512f48858a247fe77ed2c",
+    "a1e6e842cfdf653452c72a0de9ec7f14aa8aecdc"
   ],
   "tests": [
     {
+      "id": "test.audit",
+      "command": "python3 -c \"from datetime import datetime; from pathlib import Path; from constitutional_audit import audit_camilobuilder; assert audit_camilobuilder(evaluation_instant=datetime.fromisoformat('2026-08-07T17:45:00+00:00'), repository_root=Path.cwd())['result'] == 'compliant'\"",
+      "result": "passed"
+    },
+    {
+      "id": "test.ci-policy",
+      "command": "python3 -m unittest -v tests.test_constitutional_audit_ci",
+      "result": "passed"
+    },
+    {
       "id": "test.compileall",
-      "command": "python3 -m compileall -q builder.py builder_cli.py builders template_system tests",
+      "command": "python3 -m compileall -q builder.py builder_cli.py builders template_system capability_introspection constitutional_audit tests",
       "result": "passed"
     },
     {
       "id": "test.diff-check",
       "command": "git diff --check",
+      "result": "passed"
+    },
+    {
+      "id": "test.registry-integrity",
+      "command": "python3 -m unittest -v tests.test_architecture_registry tests.test_work_order_registry tests.test_exception_registry",
+      "result": "passed"
+    },
+    {
+      "id": "test.schema-validation",
+      "command": "python3 -m unittest -v tests.test_governance_schemas",
+      "result": "passed"
+    },
+    {
+      "id": "test.tree-clean",
+      "command": "test -z \"$(git status --porcelain=v1 --untracked-files=all)\"",
       "result": "passed"
     },
     {
@@ -45,16 +78,22 @@
     }
   ],
   "risks": [
-    "Architectural checks are intentionally narrower than a complete audit",
-    "Capability references cannot be checked until a capability registry exists",
-    "Contract identifiers do not yet have independent contract records"
+    "Branch protection remains external to versioned repository policy",
+    "Governance validation depends on development dependencies being available in governance and CI environments",
+    "Historical publication checks depend on the availability of the canonical Git remote",
+    "Static dependency analysis is intentionally limited and non-exhaustive"
   ],
-  "reversal": "Revert WORK-009 implementation commits in reverse chronological order.",
+  "reversal": "Create a dedicated reversal branch from published main; identify and revert the WORK-009 closure commit first, then use git revert for the nine implementation commits in reverse chronological order from a1e6e842cfdf653452c72a0de9ec7f14aa8aecdc through ac2f00def074e5bee7c50753e9bc9af82b655bd2. If any conflict occurs, abort the revert before continuing. Run the complete suite, compileall, schema and registry validation, constitutional audit, git diff --check, and clean-tree verification before publishing the reviewed reversal. Do not use reset, history rewriting, or destructive cleanup.",
   "status_history": [
     {
       "from": "approved",
       "to": "in_progress",
       "at": "2026-08-06T17:56:11+02:00"
+    },
+    {
+      "from": "in_progress",
+      "to": "completed",
+      "at": "2026-08-07T18:17:29+02:00"
     }
   ]
 }

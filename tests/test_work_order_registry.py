@@ -33,6 +33,7 @@ IMPLEMENTATION_COMMITS = [
     "38636518f5638a8c06da9d3366f551cc1cb90f5a",
     "82f9d9985c97ca514fea20e907005525e27f306f",
     "b586e24e680ca4a081b512f48858a247fe77ed2c",
+    "a1e6e842cfdf653452c72a0de9ec7f14aa8aecdc",
 ]
 INDEX_FIELDS = {"id", "title", "status", "path"}
 TERMINAL_STATES = {"cancelled", "reverted"}
@@ -206,19 +207,47 @@ class WorkOrderRegistryTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(before, after)
 
-    def test_work_order_uses_normative_identity_and_current_state(self):
+    def test_work_order_uses_normative_identity_and_completed_state(self):
         self.assertEqual(self.work_order["id"], "WORK-009")
-        self.assertEqual(self.work_order["status"], "in_progress")
+        self.assertEqual(self.work_order["status"], "completed")
         self.assertEqual(self.work_order["constitution_version"], "1.0.0")
         self.assertEqual(self.work_order["contract_change"], "creates")
-        self.assertEqual(self.work_order["affected_contract_ids"], ["contract.governance-schema"])
+        self.assertEqual(self.work_order["affected_contract_ids"], [
+            "contract.capability-introspection",
+            "contract.constitutional-audit",
+            "contract.governance-policy",
+            "contract.governance-schema",
+        ])
         self.assertEqual(self.work_order["affected_capability_ids"], [])
+
+    def test_completed_record_preserves_all_governed_component_traceability(self):
+        self.assertEqual(self.work_order["affected_component_ids"], [
+            "governance.architecture-registry",
+            "governance.constitution",
+            "governance.schemas",
+            "module.capability-introspection",
+            "module.cli",
+            "module.constitutional-audit",
+            "module.governance",
+        ])
+        architecture = load_json(ARCHITECTURE_PATH)
+        module_ids = {module["id"] for module in architecture["modules"]}
+        governed_modules = {
+            component_id
+            for component_id in self.work_order["affected_component_ids"]
+            if component_id.startswith("module.")
+        }
+        self.assertLessEqual(governed_modules, module_ids)
 
     def test_status_history_is_continuous_real_and_ends_in_current_state(self):
         self.assertEqual(transition_issues(self.work_order), [])
         first_commit_date = git("show", "-s", "--format=%cI", IMPLEMENTATION_COMMITS[0])
         self.assertEqual(self.work_order["created_at"], first_commit_date)
         self.assertEqual(self.work_order["status_history"][0]["at"], first_commit_date)
+        final_transition = self.work_order["status_history"][-1]
+        self.assertEqual(final_transition["from"], "in_progress")
+        self.assertEqual(final_transition["to"], "completed")
+        self.assertEqual(final_transition["at"], "2026-08-07T18:17:29+02:00")
         self.assertFalse(any(source in TERMINAL_STATES for source, _ in VALID_TRANSITIONS))
         published_origins = {source for source, target in VALID_TRANSITIONS if target == "published"}
         self.assertEqual(published_origins, {"completed"})
@@ -250,6 +279,13 @@ class WorkOrderRegistryTests(unittest.TestCase):
             self.assertEqual(set(test), expected_fields)
             test_ids.append(test["id"])
         self.assertEqual(test_ids, sorted(set(test_ids)))
+
+    def test_completed_record_contains_only_residual_risks_and_concrete_reversal(self):
+        self.assertEqual(self.work_order["risks"], sorted(set(self.work_order["risks"])))
+        self.assertTrue(all("debt" not in risk.lower() for risk in self.work_order["risks"]))
+        self.assertIn("git revert", self.work_order["reversal"])
+        self.assertIn("reverse chronological order", self.work_order["reversal"])
+        self.assertNotIn("registry_closure_commit_id", self.work_order)
 
     def test_contract_references_are_known_and_capabilities_are_not_invented(self):
         architecture = load_json(ARCHITECTURE_PATH)
