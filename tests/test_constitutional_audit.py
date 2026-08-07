@@ -269,7 +269,7 @@ class ConstitutionalAuditTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             copy_repository(root)
-            mutate_json(root, "governance/work-orders/index.json", lambda value: value[0].update(status="published"))
+            mutate_json(root, "governance/work-orders/index.json", lambda value: value[0].update(status="completed"))
             self.assertEqual(audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)["result"], "non_compliant")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

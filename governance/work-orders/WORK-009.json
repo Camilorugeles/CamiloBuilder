@@ -1,9 +1,9 @@
 {
   "schema_version": 2,
   "id": "WORK-009",
-  "record_version": "1.0.0",
+  "record_version": "1.0.1",
   "title": "Establish CamiloBuilder Constitution",
-  "status": "completed",
+  "status": "published",
   "created_at": "2026-08-06T17:56:11+02:00",
   "contract_change": "creates",
   "constitution_version": "1.0.0",
@@ -35,6 +35,7 @@
     "b586e24e680ca4a081b512f48858a247fe77ed2c",
     "a1e6e842cfdf653452c72a0de9ec7f14aa8aecdc"
   ],
+  "registry_closure_commit_id": "759360f02622905cba971695472ef10de4a24aa6",
   "tests": [
     {
       "id": "test.audit",
@@ -44,6 +45,11 @@
     {
       "id": "test.ci-policy",
       "command": "python3 -m unittest -v tests.test_constitutional_audit_ci",
+      "result": "passed"
+    },
+    {
+      "id": "test.closure-publication",
+      "command": "git merge-base --is-ancestor 759360f02622905cba971695472ef10de4a24aa6 origin/main",
       "result": "passed"
     },
     {
@@ -94,6 +100,11 @@
       "from": "in_progress",
       "to": "completed",
       "at": "2026-08-07T18:17:29+02:00"
+    },
+    {
+      "from": "completed",
+      "to": "published",
+      "at": "2026-08-07T18:39:12+02:00"
     }
   ]
 }

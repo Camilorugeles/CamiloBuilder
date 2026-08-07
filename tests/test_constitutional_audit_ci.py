@@ -173,10 +173,13 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
 
     def test_work_order_traceability_includes_the_published_policy_commit(self):
         document = json.loads(WORK_ORDER_PATH.read_text(encoding="utf-8"))
-        self.assertEqual(document["status"], "completed")
+        self.assertEqual(document["status"], "published")
         self.assertEqual(document["implementation_commit_ids"][-1], PUBLISHED_POLICY_COMMIT)
         self.assertEqual(document["implementation_commit_ids"].count(PUBLISHED_POLICY_COMMIT), 1)
-        self.assertNotIn("registry_closure_commit_id", document)
+        self.assertEqual(
+            document["registry_closure_commit_id"],
+            "759360f02622905cba971695472ef10de4a24aa6",
+        )
 
     @staticmethod
     def _fake_audit_module():

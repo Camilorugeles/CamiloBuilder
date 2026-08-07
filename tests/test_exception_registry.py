@@ -218,7 +218,7 @@ class ExceptionRegistryTests(unittest.TestCase):
 
     def test_work_order_traceability_adds_only_the_previously_published_commit(self):
         work_order = load_json(WORK_ORDER_PATH)
-        self.assertEqual(work_order["status"], "completed")
+        self.assertEqual(work_order["status"], "published")
         self.assertEqual(
             work_order["implementation_commit_ids"],
             [
@@ -233,7 +233,10 @@ class ExceptionRegistryTests(unittest.TestCase):
                 "a1e6e842cfdf653452c72a0de9ec7f14aa8aecdc",
             ],
         )
-        self.assertNotIn("registry_closure_commit_id", work_order)
+        self.assertEqual(
+            work_order["registry_closure_commit_id"],
+            "759360f02622905cba971695472ef10de4a24aa6",
+        )
 
     def test_each_invalid_fixture_fails_for_one_specific_reason(self):
         schema_cases = {

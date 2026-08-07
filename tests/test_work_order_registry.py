@@ -207,9 +207,10 @@ class WorkOrderRegistryTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(before, after)
 
-    def test_work_order_uses_normative_identity_and_completed_state(self):
+    def test_work_order_uses_normative_identity_and_published_state(self):
         self.assertEqual(self.work_order["id"], "WORK-009")
-        self.assertEqual(self.work_order["status"], "completed")
+        self.assertEqual(self.work_order["status"], "published")
+        self.assertEqual(self.work_order["record_version"], "1.0.1")
         self.assertEqual(self.work_order["constitution_version"], "1.0.0")
         self.assertEqual(self.work_order["contract_change"], "creates")
         self.assertEqual(self.work_order["affected_contract_ids"], [
@@ -244,10 +245,14 @@ class WorkOrderRegistryTests(unittest.TestCase):
         first_commit_date = git("show", "-s", "--format=%cI", IMPLEMENTATION_COMMITS[0])
         self.assertEqual(self.work_order["created_at"], first_commit_date)
         self.assertEqual(self.work_order["status_history"][0]["at"], first_commit_date)
+        completed_transition = self.work_order["status_history"][-2]
+        self.assertEqual(completed_transition["from"], "in_progress")
+        self.assertEqual(completed_transition["to"], "completed")
+        self.assertEqual(completed_transition["at"], "2026-08-07T18:17:29+02:00")
         final_transition = self.work_order["status_history"][-1]
-        self.assertEqual(final_transition["from"], "in_progress")
-        self.assertEqual(final_transition["to"], "completed")
-        self.assertEqual(final_transition["at"], "2026-08-07T18:17:29+02:00")
+        self.assertEqual(final_transition["from"], "completed")
+        self.assertEqual(final_transition["to"], "published")
+        self.assertEqual(final_transition["at"], "2026-08-07T18:39:12+02:00")
         self.assertFalse(any(source in TERMINAL_STATES for source, _ in VALID_TRANSITIONS))
         published_origins = {source for source, target in VALID_TRANSITIONS if target == "published"}
         self.assertEqual(published_origins, {"completed"})
@@ -268,7 +273,15 @@ class WorkOrderRegistryTests(unittest.TestCase):
 
     def test_implementation_and_closure_commits_are_separate_without_self_reference(self):
         self.assertIn("implementation_commit_ids", self.work_order)
-        self.assertNotIn("registry_closure_commit_id", self.work_order)
+        closure_commit = self.work_order["registry_closure_commit_id"]
+        self.assertEqual(closure_commit, "759360f02622905cba971695472ef10de4a24aa6")
+        self.assertNotIn(closure_commit, self.work_order["implementation_commit_ids"])
+        self.assertEqual(git("cat-file", "-t", closure_commit), "commit")
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", closure_commit, "origin/main"],
+            cwd=ROOT,
+            check=True,
+        )
         self.assertIn("registry_closure_commit_id", self.v2_schema["properties"])
         self.assertNotIn("registry_closure_commit_id", self.v2_schema["required"])
 
@@ -280,12 +293,21 @@ class WorkOrderRegistryTests(unittest.TestCase):
             test_ids.append(test["id"])
         self.assertEqual(test_ids, sorted(set(test_ids)))
 
-    def test_completed_record_contains_only_residual_risks_and_concrete_reversal(self):
+    def test_published_record_contains_only_residual_risks_and_concrete_reversal(self):
         self.assertEqual(self.work_order["risks"], sorted(set(self.work_order["risks"])))
         self.assertTrue(all("debt" not in risk.lower() for risk in self.work_order["risks"]))
         self.assertIn("git revert", self.work_order["reversal"])
         self.assertIn("reverse chronological order", self.work_order["reversal"])
-        self.assertNotIn("registry_closure_commit_id", self.work_order)
+        self.assertIn("registry_closure_commit_id", self.work_order)
+
+    def test_publication_evidence_is_exact_and_implementation_commits_are_unchanged(self):
+        evidence = next(test for test in self.work_order["tests"] if test["id"] == "test.closure-publication")
+        self.assertEqual(evidence, {
+            "id": "test.closure-publication",
+            "command": "git merge-base --is-ancestor 759360f02622905cba971695472ef10de4a24aa6 origin/main",
+            "result": "passed",
+        })
+        self.assertEqual(self.work_order["implementation_commit_ids"], IMPLEMENTATION_COMMITS)
 
     def test_contract_references_are_known_and_capabilities_are_not_invented(self):
         architecture = load_json(ARCHITECTURE_PATH)

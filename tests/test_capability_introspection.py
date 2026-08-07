@@ -214,7 +214,7 @@ class CapabilityIntrospectionTests(unittest.TestCase):
             "corrupt-json": lambda root: (root / "governance/architecture/registry.json").write_text("{", encoding="utf-8"),
             "unknown-schema": lambda root: self._mutate_json(root / "governance/architecture/registry.json", "schema_version", 99),
             "constitution-conflict": lambda root: (root / "governance/CONSTITUTION.md").write_text("**Versión constitucional:** 9.0.0  \n", encoding="utf-8"),
-            "incoherent-index": lambda root: self._mutate_json(root / "governance/work-orders/index.json", "0.status", "published"),
+            "incoherent-index": lambda root: self._mutate_json(root / "governance/work-orders/index.json", "0.status", "completed"),
         }
         for name, corrupt in cases.items():
             with self.subTest(case=name), tempfile.TemporaryDirectory() as temporary:

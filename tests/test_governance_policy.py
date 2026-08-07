@@ -151,8 +151,11 @@ class GovernancePolicyTests(unittest.TestCase):
         commits = self.work_order["implementation_commit_ids"]
         self.assertEqual(commits[-1], PUBLISHED_POLICY_COMMIT)
         self.assertEqual(commits.count(PUBLISHED_POLICY_COMMIT), 1)
-        self.assertEqual(self.work_order["status"], "completed")
-        self.assertNotIn("registry_closure_commit_id", self.work_order)
+        self.assertEqual(self.work_order["status"], "published")
+        self.assertEqual(
+            self.work_order["registry_closure_commit_id"],
+            "759360f02622905cba971695472ef10de4a24aa6",
+        )
 
     def test_policy_has_no_derived_inventories_or_concrete_records(self):
         forbidden = (
