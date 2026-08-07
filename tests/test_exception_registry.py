@@ -227,6 +227,7 @@ class ExceptionRegistryTests(unittest.TestCase):
                 "90cf95cb6062a4d7213c60380c23f15163fdc43c",
                 "078c719a959e1f1a56f6289dde336850f68af237",
                 "8ad36b81a95787cc25468387bbbce695e79bcbed",
+                "38636518f5638a8c06da9d3366f551cc1cb90f5a",
             ],
         )
         self.assertNotIn("registry_closure_commit_id", work_order)

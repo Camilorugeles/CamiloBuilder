@@ -177,7 +177,7 @@ class CapabilityIntrospectionTests(unittest.TestCase):
         self.assertEqual(self.report["active_exceptions"]["items"], [])
 
     def test_classifications_sources_versions_and_observations_are_exact(self):
-        self.assertEqual(self.report["architecture_version"]["value"], "1.1.0")
+        self.assertEqual(self.report["architecture_version"]["value"], "1.2.0")
         self.assertEqual(self.report["constitution_version"]["value"], "1.0.0")
         self.assertEqual(self.report["commands"]["classification"], "executable_derived")
         self.assertEqual(self.report["contracts"]["classification"], "normative_declared")
@@ -185,7 +185,6 @@ class CapabilityIntrospectionTests(unittest.TestCase):
         observations = self.report["limitations"]["items"]
         self.assertEqual([item["id"] for item in observations], [
             "observed.capability-registry-absent",
-            "observed.constitutional-audit-module-absent",
             "observed.contract-registry-absent",
         ])
         self.assertTrue(all(set(item) == {"id", "operation", "target", "result"} for item in observations))

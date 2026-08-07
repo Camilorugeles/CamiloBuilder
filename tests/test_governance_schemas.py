@@ -85,11 +85,14 @@ class GovernanceSchemaTests(unittest.TestCase):
             for name in SCHEMA_NAMES
         }
 
-    def test_exactly_six_versioned_schemas_exist_and_are_valid_json(self):
+    def test_six_record_schemas_and_independent_audit_schema_exist(self):
         schema_files = sorted(path.name for path in SCHEMA_DIR.glob("*.schema.json"))
         self.assertEqual(
             schema_files,
-            [f"{name}.schema.json" for name in sorted(SCHEMA_NAMES)],
+            sorted(
+                [f"{name}.schema.json" for name in SCHEMA_NAMES]
+                + ["audit-report.schema.json"]
+            ),
         )
         self.assertEqual(len(self.schemas), 6)
 

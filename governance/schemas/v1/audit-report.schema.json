@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://camilobuilder.dev/governance/schemas/v1/audit-report.schema.json",
+  "title": "CamiloBuilder constitutional audit report schema v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "report_version", "evaluation_instant", "result",
+    "constitution_version", "architecture_version", "summary",
+    "active_exception_ids", "controls", "findings"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "report_version": { "$ref": "#/$defs/semver" },
+    "evaluation_instant": { "type": "string", "format": "date-time" },
+    "result": { "enum": ["compliant", "compliant_with_exceptions", "non_compliant", "indeterminate"] },
+    "constitution_version": { "$ref": "#/$defs/versionOrUnknown" },
+    "architecture_version": { "$ref": "#/$defs/versionOrUnknown" },
+    "summary": { "$ref": "#/$defs/summary" },
+    "active_exception_ids": {
+      "type": "array", "items": { "type": "string", "pattern": "^EXCEPTION-[0-9]{3,}$" }, "uniqueItems": true
+    },
+    "controls": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/control" }, "uniqueItems": true },
+    "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" }, "uniqueItems": true }
+  },
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "versionOrUnknown": {
+      "oneOf": [{ "$ref": "#/$defs/semver" }, { "const": "unknown" }]
+    },
+    "severity": { "enum": ["critical", "error", "warning"] },
+    "controlStatus": { "enum": ["passed", "failed", "excepted", "indeterminate"] },
+    "findingOutcome": { "enum": ["failed", "excepted", "indeterminate"] },
+    "strings": {
+      "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "failed", "excepted", "indeterminate"],
+      "properties": {
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "excepted": { "type": "integer", "minimum": 0 },
+        "indeterminate": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "severity", "status", "source_ids", "finding_ids", "exception_ids"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^control\\.[a-z0-9.-]+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "severity": { "$ref": "#/$defs/severity" },
+        "status": { "$ref": "#/$defs/controlStatus" },
+        "source_ids": { "$ref": "#/$defs/strings" },
+        "finding_ids": { "$ref": "#/$defs/strings" },
+        "exception_ids": { "$ref": "#/$defs/strings" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "control_id", "severity", "outcome", "code", "message",
+        "source_id", "constitutional_provision", "subject_ids", "exception_id"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^finding\\.[0-9]{3,}$" },
+        "control_id": { "type": "string", "pattern": "^control\\.[a-z0-9.-]+$" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "outcome": { "$ref": "#/$defs/findingOutcome" },
+        "code": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "message": { "type": "string", "minLength": 1 },
+        "source_id": { "type": "string", "minLength": 1 },
+        "constitutional_provision": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$" },
+        "subject_ids": { "$ref": "#/$defs/strings" },
+        "exception_id": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^EXCEPTION-[0-9]{3,}$" }
+          ]
+        }
+      }
+    }
+  }
+}

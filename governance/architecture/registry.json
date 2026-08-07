@@ -1,14 +1,15 @@
 {
   "schema_version": 2,
   "id": "architecture.camilobuilder",
-  "record_version": "1.1.0",
-  "architecture_version": "1.1.0",
+  "record_version": "1.2.0",
+  "architecture_version": "1.2.0",
   "constitution_version": "1.0.0",
   "status": "active",
   "contract_ids": [
     "contract.capability-introspection",
     "contract.cli-public-interface",
     "contract.component-generation-safety",
+    "contract.constitutional-audit",
     "contract.default-generated-content",
     "contract.governance-schema",
     "contract.public-facade",
@@ -43,6 +44,7 @@
       "prohibited_dependency_ids": [
         "module.capability-introspection",
         "module.cli",
+        "module.constitutional-audit",
         "module.governance",
         "module.public-facade"
       ]
@@ -74,6 +76,7 @@
         "module.template-system"
       ],
       "prohibited_dependency_ids": [
+        "module.constitutional-audit",
         "module.public-facade"
       ]
     },
@@ -103,8 +106,38 @@
       ],
       "prohibited_dependency_ids": [
         "module.capability-introspection",
+        "module.constitutional-audit",
         "module.governance",
         "module.public-facade"
+      ]
+    },
+    {
+      "id": "module.constitutional-audit",
+      "paths": [
+        "constitutional_audit"
+      ],
+      "stability": "experimental",
+      "responsibilities": [
+        "Audit constitutional and architectural compliance without side effects",
+        "Evaluate governed exceptions against an explicit instant"
+      ],
+      "provides_contract_ids": [
+        "contract.constitutional-audit"
+      ],
+      "consumes_contract_ids": [
+        "contract.capability-introspection",
+        "contract.governance-schema"
+      ],
+      "allowed_dependency_ids": [
+        "module.capability-introspection",
+        "module.governance"
+      ],
+      "prohibited_dependency_ids": [
+        "module.builders",
+        "module.cli",
+        "module.public-facade",
+        "module.template-catalog",
+        "module.template-system"
       ]
     },
     {
@@ -126,6 +159,7 @@
         "module.builders",
         "module.capability-introspection",
         "module.cli",
+        "module.constitutional-audit",
         "module.public-facade",
         "module.template-catalog",
         "module.template-system"
@@ -153,6 +187,7 @@
       "prohibited_dependency_ids": [
         "module.builders",
         "module.capability-introspection",
+        "module.constitutional-audit",
         "module.governance",
         "module.template-catalog",
         "module.template-system"
@@ -177,6 +212,7 @@
         "module.builders",
         "module.capability-introspection",
         "module.cli",
+        "module.constitutional-audit",
         "module.governance",
         "module.public-facade",
         "module.template-system"
@@ -207,6 +243,7 @@
         "module.builders",
         "module.capability-introspection",
         "module.cli",
+        "module.constitutional-audit",
         "module.governance",
         "module.public-facade"
       ]
