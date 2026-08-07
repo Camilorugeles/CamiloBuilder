@@ -259,8 +259,8 @@ class ArchitectureRegistryTests(unittest.TestCase):
 
     def test_registry_versions_are_the_governed_initial_versions(self):
         self.assertEqual(self.registry["schema_version"], 2)
-        self.assertEqual(self.registry["record_version"], "1.2.0")
-        self.assertEqual(self.registry["architecture_version"], "1.2.0")
+        self.assertEqual(self.registry["record_version"], "1.3.0")
+        self.assertEqual(self.registry["architecture_version"], "1.3.0")
         self.assertEqual(self.registry["constitution_version"], "1.0.0")
 
     def test_registry_contains_no_derived_inventories(self):
@@ -324,7 +324,15 @@ class ArchitectureRegistryTests(unittest.TestCase):
         )
         self.assertEqual(
             modules["module.constitutional-audit"]["consumes_contract_ids"],
-            ["contract.capability-introspection", "contract.governance-schema"],
+            [
+                "contract.capability-introspection",
+                "contract.governance-policy",
+                "contract.governance-schema",
+            ],
+        )
+        self.assertEqual(
+            modules["module.governance"]["provides_contract_ids"],
+            ["contract.governance-policy", "contract.governance-schema"],
         )
         self.assertNotIn("contract.builder-services", self.registry["contract_ids"])
         self.assertNotIn(

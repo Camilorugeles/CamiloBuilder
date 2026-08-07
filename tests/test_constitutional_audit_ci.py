@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / ".github/workflows/constitutional-audit.yml"
 WORK_ORDER_PATH = ROOT / "governance/work-orders/WORK-009.json"
 MANUAL_INSTANT = "2026-08-07T17:45:00+00:00"
-PUBLISHED_BLOCK_7_COMMIT = "82f9d9985c97ca514fea20e907005525e27f306f"
+PUBLISHED_BLOCK_8_COMMIT = "b586e24e680ca4a081b512f48858a247fe77ed2c"
 DIAGNOSTIC_FIELDS = {
     "evaluation_instant",
     "result",
@@ -171,11 +171,11 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
                     self.assertEqual(len(lines), 1)
                     self.assertEqual(set(json.loads(lines[0])), DIAGNOSTIC_FIELDS)
 
-    def test_work_order_adds_only_the_published_block_7_commit(self):
+    def test_work_order_traceability_includes_the_published_block_8_commit(self):
         document = json.loads(WORK_ORDER_PATH.read_text(encoding="utf-8"))
         self.assertEqual(document["status"], "in_progress")
-        self.assertEqual(document["implementation_commit_ids"][-1], PUBLISHED_BLOCK_7_COMMIT)
-        self.assertEqual(document["implementation_commit_ids"].count(PUBLISHED_BLOCK_7_COMMIT), 1)
+        self.assertEqual(document["implementation_commit_ids"][-1], PUBLISHED_BLOCK_8_COMMIT)
+        self.assertEqual(document["implementation_commit_ids"].count(PUBLISHED_BLOCK_8_COMMIT), 1)
         self.assertNotIn("registry_closure_commit_id", document)
 
     @staticmethod
