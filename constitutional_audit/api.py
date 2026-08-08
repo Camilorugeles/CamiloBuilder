@@ -6,6 +6,10 @@ from capability_introspection.constitution import (
     ConstitutionSourceError,
     read_constitution_version,
 )
+from capability_introspection.work_orders import (
+    WorkOrderSourceError,
+    discover_work_orders,
+)
 from constitutional_audit.controls import (
     CONTROL_BY_ID,
     MANUAL_ASSERTIONS,
@@ -52,11 +56,11 @@ CONTROL_SOURCES = {
     "control.exceptions.temporal-validity": ["governance/exceptions/index.json"],
     "control.governance.manual-assertion-sources": ["governance/MAINTAINERS.md"],
     "control.introspection.coherence": ["capability_introspection.describe_camilobuilder"],
-    "control.references.integrity": ["governance/architecture/registry.json", "governance/work-orders/index.json", "governance/exceptions/index.json"],
+    "control.references.integrity": ["governance/architecture/registry.json", "governance/work-orders/", "governance/exceptions/index.json"],
     "control.schemas.references": ["governance/schemas"],
     "control.schemas.selection": ["governance/schemas"],
     "control.schemas.validation": ["governance/schemas", "governance architecture and registry documents"],
-    "control.work-orders.integrity": ["governance/work-orders/index.json"],
+    "control.work-orders.integrity": ["governance/work-orders/"],
 }
 
 
@@ -328,37 +332,42 @@ def _perform_audit(root, instant):
         _add(findings, "control.schemas.references", "indeterminate", "schema-catalog-unavailable", "governance/schemas", "governance.schemas")
 
     try:
-        work_order_index, work_orders = _load_index(
-            root, "governance/work-orders/index.json", {"id", "title", "status", "path"}
-        )
-        known_work_orders = {item["id"] for item in work_order_index}
-        for entry, document in zip(work_order_index, work_orders):
+        discovered_work_orders = discover_work_orders(root)
+        work_order_index = [
+            {field: item[field] for field in ("id", "title", "status", "path")}
+            for item in discovered_work_orders
+        ]
+        work_orders = [item["document"] for item in discovered_work_orders]
+        known_work_orders = {item["id"] for item in discovered_work_orders}
+        for item in discovered_work_orders:
+            if item["model"] != "legacy":
+                continue
+            document = item["document"]
             try:
-                if document.get("schema_version") not in {1, 2}:
-                    _add(findings, "control.schemas.selection", "failed", "unknown-schema-version", entry["path"], entry["id"])
                 errors = _validate_record(root, "work-order", document)
                 if errors:
-                    _add(findings, "control.work-orders.integrity", "failed", "work-order-schema-invalid", entry["path"], entry["id"])
+                    _add(findings, "control.work-orders.integrity", "failed", "work-order-schema-invalid", item["path"], item["id"])
             except ValidationUnavailable:
                 schema_validation_available = False
-                _add(findings, "control.work-orders.integrity", "indeterminate", "schema-validation-unavailable", entry["path"], entry["id"])
+                _add(findings, "control.work-orders.integrity", "indeterminate", "schema-validation-unavailable", item["path"], item["id"])
             except SourceError as error:
-                _add(findings, "control.work-orders.integrity", "failed", str(error), entry["path"], entry["id"])
+                _add(findings, "control.work-orders.integrity", "failed", str(error), item["path"], item["id"])
             for issue in history_issues(document, WORK_ORDER_TRANSITIONS):
-                _add(findings, "control.work-orders.integrity", "failed", issue, entry["path"], entry["id"])
-    except SourceError as error:
+                _add(findings, "control.work-orders.integrity", "failed", issue, item["path"], item["id"])
+    except WorkOrderSourceError as error:
+        work_order_index = []
         known_work_orders = set()
-        outcome = "failed" if str(error) in {"incoherent-index", "unordered-index"} else "indeterminate"
-        _add(findings, "control.work-orders.integrity", outcome, "work-order-index-invalid", "governance/work-orders/index.json", "governance.work-orders")
+        _add(findings, "control.work-orders.integrity", "failed", error.code, "governance/work-orders/", "governance.work-orders")
 
     known_contracts = set(architecture.get("contract_ids", [])) if architecture else set()
     if architecture is not None:
         for document in work_orders:
             work_id = document.get("id", "governance.work-orders")
             for contract in sorted(set(document.get("affected_contract_ids", [])) - known_contracts):
-                _add(findings, "control.references.integrity", "failed", "unknown-work-order-contract", "governance/work-orders/index.json", contract)
-            for dependency in sorted(set(document.get("dependency_ids", [])) - known_work_orders):
-                _add(findings, "control.references.integrity", "failed", "unknown-work-order-dependency", "governance/work-orders/index.json", dependency)
+                _add(findings, "control.references.integrity", "failed", "unknown-work-order-contract", "governance/work-orders/", contract)
+            dependencies = document.get("dependency_ids", document.get("dependencies", []))
+            for dependency in sorted(set(dependencies) - known_work_orders):
+                _add(findings, "control.references.integrity", "failed", "unknown-work-order-dependency", "governance/work-orders/", dependency)
 
     exception_registry_valid = True
     try:

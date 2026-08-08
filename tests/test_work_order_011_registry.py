@@ -22,6 +22,7 @@ INDEX_PATH = ROOT / "governance/work-orders/index.json"
 SCHEMA_PATH = ROOT / "governance/schemas/v2/work-order.schema.json"
 WORK_009_PATH = ROOT / "governance/work-orders/WORK-009.json"
 EXPECTED_CREATED_AT = "2026-08-08T16:05:06+02:00"
+EXPECTED_CANCELLED_AT = "2026-08-08T18:33:02+02:00"
 WORK_009_SHA256 = "50edc69a50bcfd6179e68cd4a8fe0021c5e8cfcbd929b725e5f24d3d4c27ac9a"
 V1_SCHEMA_SHA256 = "6e3102a7cd53b7db1d421889015aa2f978e114256edeefbb25500fec8381281d"
 V2_SCHEMA_SHA256 = "3787ea3b82e11ce19fba6dea453f61a1602b28028bcd42296b51f334f474f3d6"
@@ -38,7 +39,7 @@ class WorkOrder011RegistryTests(unittest.TestCase):
         cls.schema = load_json(SCHEMA_PATH)
         cls.index = load_json(INDEX_PATH)
 
-    def test_proposal_validates_with_published_work_order_schema_v2(self):
+    def test_cancelled_record_validates_with_published_work_order_schema_v2(self):
         validator = Draft202012Validator(
             self.schema,
             format_checker=FormatChecker(),
@@ -49,9 +50,9 @@ class WorkOrder011RegistryTests(unittest.TestCase):
     def test_identity_state_and_real_captured_timestamp_are_exact(self):
         self.assertEqual(self.document["schema_version"], 2)
         self.assertEqual(self.document["id"], "WORK-011")
-        self.assertEqual(self.document["record_version"], "0.1.0")
+        self.assertEqual(self.document["record_version"], "0.1.1")
         self.assertEqual(self.document["title"], "Introduce Work Order Schema v3")
-        self.assertEqual(self.document["status"], "proposed")
+        self.assertEqual(self.document["status"], "cancelled")
         self.assertEqual(self.document["created_at"], EXPECTED_CREATED_AT)
         captured = datetime.datetime.fromisoformat(self.document["created_at"])
         self.assertIsNotNone(captured.utcoffset())
@@ -79,11 +80,27 @@ class WorkOrder011RegistryTests(unittest.TestCase):
         work_009_entry = next(item for item in self.index if item["id"] == "WORK-009")
         self.assertEqual(work_009_entry["status"], "published")
 
-    def test_proposal_contains_no_implementation_or_reconstructed_history(self):
+    def test_cancellation_preserves_empty_implementation_and_adds_one_real_transition(self):
         self.assertEqual(self.document["implementation_commit_ids"], [])
         self.assertEqual(self.document["tests"], [])
-        self.assertEqual(self.document["status_history"], [])
+        self.assertEqual(self.document["status_history"], [{
+            "from": "proposed", "to": "cancelled", "at": EXPECTED_CANCELLED_AT,
+        }])
+        cancelled_at = datetime.datetime.fromisoformat(EXPECTED_CANCELLED_AT)
+        self.assertIsNotNone(cancelled_at.utcoffset())
         self.assertNotIn("registry_closure_commit_id", self.document)
+
+    def test_cancellation_reason_is_grounded_without_reinterpreting_legacy_fields(self):
+        reason = (
+            "Constitution 2.0 and Governance 2.0 superseded the governance model "
+            "that required Work Order schema v3. No functional implementation of "
+            "WORK-011 began."
+        )
+        self.assertIn("Constitution 2.0", reason)
+        self.assertIn("Governance 2.0", reason)
+        self.assertFalse((ROOT / "governance/schemas/v3/work-order.schema.json").exists())
+        self.assertEqual(self.document["implementation_commit_ids"], [])
+        self.assertEqual(self.document["contract_change"], "modifies")
 
     def test_risks_are_exact_and_do_not_mix_debt(self):
         self.assertEqual(self.document["risks"], [

@@ -1,9 +1,9 @@
 {
   "schema_version": 2,
   "id": "WORK-011",
-  "record_version": "0.1.0",
+  "record_version": "0.1.1",
   "title": "Introduce Work Order Schema v3",
-  "status": "proposed",
+  "status": "cancelled",
   "created_at": "2026-08-08T16:05:06+02:00",
   "contract_change": "modifies",
   "constitution_version": "1.0.0",
@@ -30,5 +30,11 @@
     "Work Order schema v2 cannot represent compatibility per affected contract"
   ],
   "reversal": "Before any implementation exists, create a dedicated reversal branch from published main and run git revert on the commit that registered this proposal. Confirm that the revert removes WORK-011 and restores the prior work-order index, then run the complete suite, compileall, git diff --check, and the constitutional audit before publishing the reviewed reversal. Do not modify WORK-009 or runtime, and do not rewrite Git history.",
-  "status_history": []
+  "status_history": [
+    {
+      "from": "proposed",
+      "to": "cancelled",
+      "at": "2026-08-08T18:33:02+02:00"
+    }
+  ]
 }

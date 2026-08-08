@@ -173,7 +173,21 @@ class CapabilityIntrospectionTests(unittest.TestCase):
             [item["module_id"] for item in self.report["architectural_dependencies"]["items"]],
             sorted(module["id"] for module in architecture["modules"]),
         )
-        self.assertEqual(self.report["work_orders"]["items"], load_json(ROOT / "governance" / "work-orders" / "index.json"))
+        self.assertEqual(self.report["work_orders"]["source"], "governance/work-orders/")
+        self.assertEqual(self.report["work_orders"]["items"], [
+            {
+                "id": "WORK-009", "title": "Establish CamiloBuilder Constitution",
+                "status": "published", "path": "governance/work-orders/WORK-009.json",
+            },
+            {
+                "id": "WORK-010", "title": "Make constitutional CI history-aware",
+                "status": "done", "path": "governance/work-orders/WORK-010.json",
+            },
+            {
+                "id": "WORK-011", "title": "Introduce Work Order Schema v3",
+                "status": "cancelled", "path": "governance/work-orders/WORK-011.json",
+            },
+        ])
         self.assertEqual(self.report["active_exceptions"]["items"], [])
 
     def test_classifications_sources_versions_and_observations_are_exact(self):
@@ -218,7 +232,9 @@ class CapabilityIntrospectionTests(unittest.TestCase):
             "corrupt-json": lambda root: (root / "governance/architecture/registry.json").write_text("{", encoding="utf-8"),
             "unknown-schema": lambda root: self._mutate_json(root / "governance/architecture/registry.json", "schema_version", 99),
             "invalid-constitution": lambda root: (root / "governance/CONSTITUTION.md").write_text("**Versión constitucional:** invalid  \n", encoding="utf-8"),
-            "incoherent-index": lambda root: self._mutate_json(root / "governance/work-orders/index.json", "0.status", "completed"),
+            "incoherent-work-order": lambda root: self._mutate_json(
+                root / "governance/work-orders/WORK-010.json", "id", "WORK-999"
+            ),
         }
         for name, corrupt in cases.items():
             with self.subTest(case=name), tempfile.TemporaryDirectory() as temporary:

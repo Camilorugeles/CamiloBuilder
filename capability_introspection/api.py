@@ -6,6 +6,10 @@ from capability_introspection.constitution import (
     ConstitutionSourceError,
     read_constitution_version,
 )
+from capability_introspection.work_orders import (
+    WorkOrderSourceError,
+    discover_work_orders,
+)
 from template_system.errors import TemplateError
 from template_system.registry import TemplateRegistry
 
@@ -197,11 +201,14 @@ def _describe_camilobuilder(
         raise IntrospectionError("Invalid constitutional source") from error
     commands, builders, component_types = _executable_metadata()
     templates = _templates(root)
-    work_orders = _index(
-        root,
-        "governance/work-orders/index.json",
-        {"id", "title", "status", "path"},
-    )
+    try:
+        discovered_work_orders = discover_work_orders(root)
+    except WorkOrderSourceError as error:
+        raise IntrospectionError("Invalid Work Order source") from error
+    work_orders = [
+        {field: item[field] for field in ("id", "title", "status", "path")}
+        for item in discovered_work_orders
+    ]
     exceptions = _index(root, "governance/exceptions/index.json", {"id", "status", "path"})
     active_exceptions = [entry for entry in exceptions if entry["status"] == "active"]
     modules = sorted(architecture["modules"], key=lambda item: item["id"])
@@ -244,7 +251,7 @@ def _describe_camilobuilder(
             "normative_declared", architecture_source, "items", dependencies
         ),
         "work_orders": _block(
-            "normative_declared", "governance/work-orders/index.json", "items", work_orders
+            "normative_declared", "governance/work-orders/", "items", work_orders
         ),
         "active_exceptions": _block(
             "normative_declared", "governance/exceptions/index.json", "items", active_exceptions

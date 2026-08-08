@@ -15,7 +15,6 @@ ARCHITECTURE_PATH = ROOT / "governance/architecture/registry.json"
 WORK_009_PATH = ROOT / "governance/work-orders/WORK-009.json"
 WORK_011_PATH = ROOT / "governance/work-orders/WORK-011.json"
 WORK_009_SHA256 = "50edc69a50bcfd6179e68cd4a8fe0021c5e8cfcbd929b725e5f24d3d4c27ac9a"
-WORK_011_SHA256 = "60e8d4be6f0d14128d97aff272aa32b24a063f6a30e428abfb83057bd9d3ce12"
 EVALUATION_INSTANT = datetime.fromisoformat("2026-08-08T15:46:16+00:00")
 
 
@@ -88,13 +87,12 @@ class GovernancePolicyTests(unittest.TestCase):
         )
         self.assertEqual(report["automated_result"], "verified")
 
-    def test_legacy_work_orders_are_byte_for_byte_intact(self):
+    def test_work_009_is_intact_and_work_011_remains_a_legacy_record(self):
         self.assertEqual(hashlib.sha256(WORK_009_PATH.read_bytes()).hexdigest(), WORK_009_SHA256)
-        self.assertEqual(hashlib.sha256(WORK_011_PATH.read_bytes()).hexdigest(), WORK_011_SHA256)
         work_011 = json.loads(WORK_011_PATH.read_text(encoding="utf-8"))
         self.assertEqual(
             (work_011["schema_version"], work_011["record_version"], work_011["status"]),
-            (2, "0.1.0", "proposed"),
+            (2, "0.1.1", "cancelled"),
         )
 
     def test_policy_contains_no_derived_runtime_inventory_or_commit_hash(self):
