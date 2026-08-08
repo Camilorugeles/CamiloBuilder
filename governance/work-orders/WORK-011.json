@@ -1,0 +1,34 @@
+{
+  "schema_version": 2,
+  "id": "WORK-011",
+  "record_version": "0.1.0",
+  "title": "Introduce Work Order Schema v3",
+  "status": "proposed",
+  "created_at": "2026-08-08T16:05:06+02:00",
+  "contract_change": "modifies",
+  "constitution_version": "1.0.0",
+  "affected_component_ids": [
+    "module.capability-introspection",
+    "module.constitutional-audit",
+    "module.governance"
+  ],
+  "affected_contract_ids": [
+    "contract.capability-introspection",
+    "contract.constitutional-audit",
+    "contract.governance-policy",
+    "contract.governance-schema"
+  ],
+  "affected_capability_ids": [],
+  "dependency_ids": [
+    "WORK-009"
+  ],
+  "implementation_commit_ids": [],
+  "tests": [],
+  "risks": [
+    "Incorrect sequencing could make v3 Work Orders unreadable by introspection or constitutional audit",
+    "Retrospective history support could be abused if not constrained by durable evidence",
+    "Work Order schema v2 cannot represent compatibility per affected contract"
+  ],
+  "reversal": "Before any implementation exists, create a dedicated reversal branch from published main and run git revert on the commit that registered this proposal. Confirm that the revert removes WORK-011 and restores the prior work-order index, then run the complete suite, compileall, git diff --check, and the constitutional audit before publishing the reviewed reversal. Do not modify WORK-009 or runtime, and do not rewrite Git history.",
+  "status_history": []
+}

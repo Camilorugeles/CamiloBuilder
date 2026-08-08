@@ -4,5 +4,11 @@
     "title": "Establish CamiloBuilder Constitution",
     "status": "published",
     "path": "governance/work-orders/WORK-009.json"
+  },
+  {
+    "id": "WORK-011",
+    "title": "Introduce Work Order Schema v3",
+    "status": "proposed",
+    "path": "governance/work-orders/WORK-011.json"
   }
 ]

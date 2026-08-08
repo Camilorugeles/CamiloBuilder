@@ -174,13 +174,12 @@ class WorkOrderRegistryTests(unittest.TestCase):
         self.assertTrue(all(ref.startswith("#/$defs/") for ref in refs))
 
     def test_index_contains_only_the_required_fields_and_matches_document(self):
-        self.assertEqual(len(self.index), 1)
-        entry = self.index[0]
-        self.assertEqual(set(entry), INDEX_FIELDS)
-        self.assertEqual(entry["id"], "WORK-009")
-        for field in ("id", "title", "status"):
-            self.assertEqual(entry[field], self.work_order[field])
-        self.assertEqual(entry["path"], "governance/work-orders/WORK-009.json")
+        self.assertEqual([entry["id"] for entry in self.index], ["WORK-009", "WORK-011"])
+        for entry in self.index:
+            self.assertEqual(set(entry), INDEX_FIELDS)
+            document = load_json(ROOT / entry["path"])
+            for field in ("id", "title", "status"):
+                self.assertEqual(entry[field], document[field])
 
     def test_index_paths_are_local_safe_existing_unique_and_not_symlinks(self):
         paths = [entry["path"] for entry in self.index]
