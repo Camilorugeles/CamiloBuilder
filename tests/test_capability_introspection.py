@@ -178,7 +178,11 @@ class CapabilityIntrospectionTests(unittest.TestCase):
 
     def test_classifications_sources_versions_and_observations_are_exact(self):
         self.assertEqual(self.report["architecture_version"]["value"], "1.3.0")
-        self.assertEqual(self.report["constitution_version"]["value"], "1.0.0")
+        self.assertEqual(self.report["constitution_version"]["value"], "2.0.0")
+        self.assertEqual(
+            self.report["constitution_version"]["source"],
+            "governance/CONSTITUTION.md",
+        )
         self.assertEqual(self.report["commands"]["classification"], "executable_derived")
         self.assertEqual(self.report["contracts"]["classification"], "normative_declared")
         self.assertEqual(self.report["limitations"]["classification"], "observed_state")
@@ -213,7 +217,7 @@ class CapabilityIntrospectionTests(unittest.TestCase):
         cases = {
             "corrupt-json": lambda root: (root / "governance/architecture/registry.json").write_text("{", encoding="utf-8"),
             "unknown-schema": lambda root: self._mutate_json(root / "governance/architecture/registry.json", "schema_version", 99),
-            "constitution-conflict": lambda root: (root / "governance/CONSTITUTION.md").write_text("**Versión constitucional:** 9.0.0  \n", encoding="utf-8"),
+            "invalid-constitution": lambda root: (root / "governance/CONSTITUTION.md").write_text("**Versión constitucional:** invalid  \n", encoding="utf-8"),
             "incoherent-index": lambda root: self._mutate_json(root / "governance/work-orders/index.json", "0.status", "completed"),
         }
         for name, corrupt in cases.items():

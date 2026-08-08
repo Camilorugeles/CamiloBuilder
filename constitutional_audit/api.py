@@ -2,6 +2,10 @@ from datetime import datetime
 from pathlib import Path
 
 from capability_introspection import IntrospectionError, describe_camilobuilder
+from capability_introspection.constitution import (
+    ConstitutionSourceError,
+    read_constitution_version,
+)
 from constitutional_audit.controls import CONTROL_BY_ID
 from constitutional_audit.validation import (
     AST_ANALYSIS_SCOPE,
@@ -36,9 +40,9 @@ CONTROL_SOURCES = {
     "control.architecture.dependencies": ["governance/architecture/registry.json"],
     "control.architecture.modules": ["governance/architecture/registry.json"],
     "control.architecture.no-derived-inventories": ["governance/architecture/registry.json"],
-    "control.architecture.registry-schema": ["governance/architecture/registry.json", "governance/schemas/v2/architecture.schema.json"],
+    "control.architecture.registry-schema": ["governance/architecture/registry.json", "governance/schemas/v3/architecture.schema.json"],
     "control.architecture.runtime-coherence": ["governance/architecture/registry.json", "repository static Python imports"],
-    "control.constitution.version": ["governance/CONSTITUTION.md", "governance/architecture/registry.json"],
+    "control.constitution.version": ["governance/CONSTITUTION.md"],
     "control.exceptions.integrity": ["governance/exceptions/index.json"],
     "control.exceptions.temporal-validity": ["governance/exceptions/index.json"],
     "control.introspection.coherence": ["capability_introspection.describe_camilobuilder"],
@@ -99,7 +103,12 @@ def _schema_path(record_type, version):
         "work-order": "work-order.schema.json",
         "exception": "exception.schema.json",
     }
-    if version not in {1, 2}:
+    supported = {
+        "architecture": {1, 2, 3},
+        "work-order": {1, 2},
+        "exception": {1, 2},
+    }
+    if record_type not in supported or version not in supported[record_type]:
         raise SourceError("unknown-schema-version")
     return f"governance/schemas/v{version}/{names[record_type]}"
 
@@ -182,6 +191,7 @@ def _perform_audit(root, instant):
     exception_documents = []
     valid_active_exceptions = []
     schema_validation_available = True
+    constitution_version = None
 
     try:
         architecture = load_json(root, "governance/architecture/registry.json", dict)
@@ -196,7 +206,7 @@ def _perform_audit(root, instant):
 
     if architecture is not None:
         try:
-            if architecture.get("schema_version") not in {1, 2}:
+            if architecture.get("schema_version") not in {1, 2, 3}:
                 _add(findings, "control.schemas.selection", "failed", "unknown-schema-version", "governance/architecture/registry.json", "architecture.camilobuilder")
             errors = _validate_record(root, "architecture", architecture)
             for _error in errors:
@@ -204,7 +214,7 @@ def _perform_audit(root, instant):
                 break
         except ValidationUnavailable:
             schema_validation_available = False
-            _add(findings, "control.architecture.registry-schema", "indeterminate", "schema-validation-unavailable", "governance/schemas/v2/architecture.schema.json", "architecture.camilobuilder")
+            _add(findings, "control.architecture.registry-schema", "indeterminate", "schema-validation-unavailable", "governance/schemas/v3/architecture.schema.json", "architecture.camilobuilder")
         except SourceError as error:
             outcome = "failed" if str(error) == "unknown-schema-version" else "indeterminate"
             _add(findings, "control.architecture.registry-schema", outcome, str(error), "governance/architecture/registry.json", "architecture.camilobuilder")
@@ -232,14 +242,12 @@ def _perform_audit(root, instant):
         except (KeyError, OSError, SyntaxError, SourceError):
             _add(findings, "control.architecture.runtime-coherence", "indeterminate", "static-analysis-unavailable", "repository static Python imports", "architecture.camilobuilder")
 
-        try:
-            constitution = safe_path(root, "governance/CONSTITUTION.md").read_text(encoding="utf-8")
-            declared = architecture.get("constitution_version")
-            marker = f"**Versión constitucional:** {declared}  "
-            if declared != "1.0.0" or marker not in constitution:
-                _add(findings, "control.constitution.version", "failed", "constitution-version-unknown", "governance/CONSTITUTION.md", "constitution.camilobuilder")
-        except (OSError, UnicodeDecodeError, SourceError):
-            _add(findings, "control.constitution.version", "indeterminate", "constitution-unavailable", "governance/CONSTITUTION.md", "constitution.camilobuilder")
+    try:
+        constitution_version = read_constitution_version(root)
+        if constitution_version != "2.0.0":
+            _add(findings, "control.constitution.version", "failed", "constitution-version-unknown", "governance/CONSTITUTION.md", "constitution.camilobuilder")
+    except ConstitutionSourceError:
+        _add(findings, "control.constitution.version", "indeterminate", "constitution-unavailable", "governance/CONSTITUTION.md", "constitution.camilobuilder")
 
     schema_files = []
     try:
@@ -363,7 +371,7 @@ def _perform_audit(root, instant):
             description["identity"]["value"]["id"] != architecture.get("id")
             or
             description["architecture_version"]["value"] != architecture.get("architecture_version")
-            or description["constitution_version"]["value"] != architecture.get("constitution_version")
+            or description["constitution_version"]["value"] != constitution_version
             or description["contracts"]["items"] != sorted(architecture.get("contract_ids", []))
             or description["architectural_dependencies"]["items"] != expected_dependencies
             or description["work_orders"]["items"] != work_order_index
@@ -421,7 +429,7 @@ def _perform_audit(root, instant):
         "report_version": "1.0.0",
         "evaluation_instant": instant.isoformat(),
         "result": result,
-        "constitution_version": architecture.get("constitution_version", "unknown") if architecture else "unknown",
+        "constitution_version": constitution_version or "unknown",
         "architecture_version": architecture.get("architecture_version", "unknown") if architecture else "unknown",
         "summary": summary,
         "active_exception_ids": sorted(item["id"] for item in valid_active_exceptions),

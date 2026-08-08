@@ -1,0 +1,33 @@
+{
+  "schema_version": 3,
+  "id": "architecture.synthetic",
+  "record_version": "2.0.0",
+  "architecture_version": "1.0.0",
+  "status": "active",
+  "contract_ids": [
+    "contract.synthetic-builders",
+    "contract.synthetic-templates"
+  ],
+  "modules": [
+    {
+      "id": "module.synthetic-builders",
+      "paths": ["builders"],
+      "stability": "stable",
+      "responsibilities": ["Represent a synthetic builder module"],
+      "provides_contract_ids": ["contract.synthetic-builders"],
+      "consumes_contract_ids": ["contract.synthetic-templates"],
+      "allowed_dependency_ids": ["module.synthetic-templates"],
+      "prohibited_dependency_ids": []
+    },
+    {
+      "id": "module.synthetic-templates",
+      "paths": ["templates"],
+      "stability": "stable",
+      "responsibilities": ["Represent synthetic declarative content"],
+      "provides_contract_ids": ["contract.synthetic-templates"],
+      "consumes_contract_ids": [],
+      "allowed_dependency_ids": [],
+      "prohibited_dependency_ids": ["module.synthetic-builders"]
+    }
+  ]
+}

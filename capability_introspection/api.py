@@ -1,18 +1,16 @@
 import json
-import re
 from pathlib import Path, PurePosixPath
 
 from builder_cli import BUILDER_METADATA, COMMANDS
+from capability_introspection.constitution import (
+    ConstitutionSourceError,
+    read_constitution_version,
+)
 from template_system.errors import TemplateError
 from template_system.registry import TemplateRegistry
 
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[1]
-CONSTITUTION_VERSION_PATTERN = re.compile(
-    r"^\*\*Versión constitucional:\*\* ([^ ]+)  $", re.MULTILINE
-)
-
-
 class IntrospectionError(RuntimeError):
     """Raised when canonical introspection sources cannot be trusted."""
 
@@ -65,11 +63,10 @@ def _block(classification: str, source: str, field: str, content: object) -> dic
 def _architecture(root: Path) -> dict[str, object]:
     source = "governance/architecture/registry.json"
     document = _load_json(root, source, expected_type=dict)
-    if document.get("schema_version") != 2:
+    if document.get("schema_version") != 3:
         raise IntrospectionError("Unsupported architecture schema_version")
     required = {
-        "id", "record_version", "architecture_version", "constitution_version",
-        "contract_ids", "modules",
+        "id", "record_version", "architecture_version", "contract_ids", "modules",
     }
     if not required.issubset(document):
         raise IntrospectionError("Incomplete architecture registry")
@@ -90,21 +87,6 @@ def _architecture(root: Path) -> dict[str, object]:
     _unique(document["contract_ids"], lambda item: item, source)
     _unique(document["modules"], lambda item: item.get("id") if isinstance(item, dict) else None, source)
     return document
-
-
-def _constitution_version(root: Path, declared: object) -> str:
-    source = "governance/CONSTITUTION.md"
-    path = _safe_source(root, source, kind="file")
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as error:
-        raise IntrospectionError(f"Invalid constitutional source: {source}") from error
-    match = CONSTITUTION_VERSION_PATTERN.search(text)
-    if not match or match.group(1) != declared:
-        raise IntrospectionError(
-            "Constitution version contradicts the architecture registry"
-        )
-    return match.group(1)
 
 
 def _executable_metadata() -> tuple[list[dict[str, object]], list[dict[str, object]], list[str]]:
@@ -209,7 +191,10 @@ def _describe_camilobuilder(
     if root.is_symlink() or not root.is_dir():
         raise IntrospectionError("Invalid repository root")
     architecture = _architecture(root)
-    constitution_version = _constitution_version(root, architecture["constitution_version"])
+    try:
+        constitution_version = read_constitution_version(root)
+    except ConstitutionSourceError as error:
+        raise IntrospectionError("Invalid constitutional source") from error
     commands, builders, component_types = _executable_metadata()
     templates = _templates(root)
     work_orders = _index(
@@ -237,7 +222,7 @@ def _describe_camilobuilder(
         ),
         "constitution_version": _block(
             "normative_declared",
-            f"{architecture_source} + governance/CONSTITUTION.md",
+            "governance/CONSTITUTION.md",
             "value",
             constitution_version,
         ),

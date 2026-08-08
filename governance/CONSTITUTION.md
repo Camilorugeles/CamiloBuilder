@@ -1,463 +1,245 @@
 # Constitución de CamiloBuilder
 
-**Versión constitucional:** 1.0.0  
-**Work Order constituyente:** WORK-009 — Establish CamiloBuilder Constitution  
-**Estado:** Normativa inicial
+**Versión constitucional:** 2.0.0
+**Estado:** Vigente tras el cutover coordinado de Constitution 2.0
 
-## 1. Preámbulo
+## 1. Preámbulo y reconstitución
 
-CamiloBuilder existe para construir estructuras de Camilo OS de forma segura,
-determinista, compatible y auditable. Esta Constitución establece las reglas
-permanentes que gobiernan su arquitectura, sus contratos, su evolución y las
-decisiones tomadas en su nombre.
+CamiloBuilder construye proyectos y componentes de Camilo OS de forma segura,
+determinista, compatible y auditable. Esta Constitución gobierna las garantías,
+invariantes y límites que deben preservarse mientras el sistema evoluciona.
 
-La Constitución no pretende congelar el sistema. Su finalidad es permitir que
-evolucione sin perder trazabilidad, seguridad, compatibilidad ni capacidad de
-reversión. Toda persona, proceso o agente que modifique CamiloBuilder queda
-sujeto a estas reglas dentro de su alcance normativo.
+Constitution 1.0.0 estableció garantías técnicas valiosas, especialmente la no
+destrucción, el fallo seguro, el determinismo, la compatibilidad y la
+trazabilidad. También contenía un defecto de bootstrap y sobreespecificaba los
+mecanismos operativos de gobierno, creando dependencias circulares al intentar
+gobernar la evolución del propio gobierno.
+
+Constitution 2.0.0 supersede explícitamente Constitution 1.0.0 mediante una
+decisión constituyente de la autoridad material real del repositorio. Esta
+reconstitución no finge continuidad procedimental perfecta bajo el modelo
+supersedido y no reconstruye, altera ni reinterpreta retrospectivamente Work
+Orders, commits, schemas o decisiones históricas.
+
+La historia de Constitution 1.0.0 permanece íntegra en Git. WORK-009, WORK-011
+y los registros legacy conservan el significado que tenían al publicarse.
 
 ## 2. Identidad y propósito
 
-CamiloBuilder es el constructor gobernado de proyectos y componentes de Camilo
-OS. Su identidad comprende el código ejecutable, los builders, el CLI, el motor
-de plantillas, las plantillas registradas, los contratos públicos y los
-registros de gobierno aprobados.
+CamiloBuilder es el constructor gobernado de estructuras de Camilo OS. Comprende
+el CLI, los builders, el motor y catálogo de plantillas, las superficies
+contractuales, las pruebas y los mecanismos técnicos de verificación.
 
 CamiloBuilder DEBE:
 
-- Generar estructuras mediante contratos explícitos y plantillas verificables.
-- Validar entradas, manifiestos, variables, rutas y conflictos antes de escribir.
-- Preservar contenido existente salvo autorización destructiva explícita.
-- Describir y auditar su arquitectura y capacidades de forma reproducible.
-- Evolucionar mediante Work Orders pequeñas, trazables y reversibles.
+- validar antes de modificar;
+- preservar contenido existente;
+- producir resultados deterministas;
+- declarar y verificar compatibilidad;
+- mantener evidencia proporcional al riesgo;
+- evolucionar mediante cambios pequeños y reversibles;
+- describir automáticamente los hechos derivables de sus fuentes canónicas.
 
 CamiloBuilder NO DEBE convertirse implícitamente en runtime de Camilo OS,
 gestor de paquetes, sistema de despliegue, ejecutor de código generado o motor
 de plugins.
 
-## 3. Alcance normativo y descriptivo
+## 3. Alcance y autoridad
 
-### 3.1 Contenido normativo
+Esta Constitución es la norma superior dentro del repositorio. Gobierna el
+comportamiento del software y el proceso por el que se preservan sus garantías.
 
-Son normativas las secciones 1 a 18 de este documento. También son normativas
-las reglas identificadas mediante los términos DEBE, NO DEBE, DEBERÍA y PUEDE.
+La autoridad humana y material no es creada por JSON ni por CamiloBuilder.
+Procede de las personas que mantienen realmente el proyecto y de mecanismos
+externos como GitHub, los permisos del repositorio, branch protection, reviews
+y control de publicación.
 
-Estos términos significan:
+El repositorio PUEDE documentar esa autoridad y verificar aspectos técnicos,
+pero NO DEBE presentar registros internos como prueba criptográfica de
+legitimidad humana, independencia, consenso o mayoría.
 
-- **DEBE:** obligación necesaria para declarar conformidad.
-- **NO DEBE:** prohibición necesaria para declarar conformidad.
-- **DEBERÍA:** expectativa fuerte; apartarse requiere justificación trazable.
-- **PUEDE:** capacidad permitida, nunca una obligación.
+CamiloBuilder no crea una Root of Trust interna, un IAM ni un Approval Registry.
+La situación humana vigente se documenta de forma sencilla y trazable sin
+simular estructuras organizativas inexistentes.
 
-Los contratos declarados estables, las reglas de compatibilidad, las reglas de
-aprobación y los criterios de cumplimiento también son normativos.
-
-### 3.2 Contenido descriptivo
-
-Los anexos marcados expresamente como descriptivos, los diagramas, los ejemplos,
-las notas históricas y los inventarios derivados son descriptivos. Su finalidad
-es explicar el sistema, no crear obligaciones.
-
-El contenido descriptivo NO DEBE reducir, sustituir ni reinterpretar una regla
-normativa. Cuando un texto no esté clasificado de manera inequívoca, se tratará
-como descriptivo hasta que una enmienda lo convierta expresamente en normativo.
-
-## 4. Autoridad y precedencia
-
-Esta Constitución es la autoridad normativa superior dentro del repositorio de
-CamiloBuilder. Su precedencia es:
+La precedencia normativa es:
 
 1. Constitución vigente.
-2. Contratos gobernados vigentes.
-3. Work Orders aprobadas.
-4. Políticas y registros arquitectónicos aprobados.
-5. Código ejecutable y pruebas.
-6. Documentación descriptiva y ejemplos.
+2. Garantías contractuales públicas vigentes.
+3. Política operativa de governance.
+4. Decisiones arquitectónicas y cambios gobernados aplicables.
+5. Código, pruebas y documentación descriptiva.
 
-Una fuente inferior NO DEBE modificar implícitamente una fuente superior. La
-existencia de código desplegado o de comportamiento histórico no constituye por
-sí sola una enmienda constitucional.
+Una fuente inferior NO DEBE reducir implícitamente una garantía superior.
 
-Ante ambigüedad, prevalece la interpretación más protectora de los datos, la
-compatibilidad, el mínimo privilegio y la reversibilidad.
+## 4. Fuentes de verdad y límites de verificación
+
+Las decisiones humanas, los hechos técnicos y la evidencia externa son clases
+distintas de información:
+
+- una persona decide o afirma autoridad, riesgo y aceptación;
+- el software verifica únicamente hechos observables;
+- Git conserva historia técnica, commits, diferencias y reversión;
+- GitHub materializa publicación, permisos, reviews y checks;
+- CI registra la ejecución de validaciones.
+
+CamiloBuilder NO DEBE representar una decisión humana como si hubiese sido
+demostrada automáticamente. Una obligación no automatizada DEBE permanecer
+visible como afirmación manual u obligación no verificada.
+
+La versión constitucional tiene una única fuente canónica: este documento.
 
 ## 5. Principios constitucionales
 
-### 5.1 Principio de Autoconocimiento
+### 5.1 No Destrucción
 
-CamiloBuilder DEBE poder describir automáticamente su identidad, arquitectura,
-capacidades, contratos, limitaciones, builders, comandos, plantillas,
-dependencias y Work Orders.
+Ninguna operación DEBE sobrescribir, eliminar o invalidar contenido existente
+sin una acción explícita, acotada, trazable y reversible. La ausencia de
+conflicto aparente NO autoriza destrucción silenciosa.
 
-La descripción DEBE derivarse de fuentes canónicas, ser legible por máquinas,
-tener formato versionado y producir resultados deterministas. Una capacidad que
-no pueda describirse, vincularse y auditarse NO DEBE considerarse plenamente
-gobernada.
+### 5.2 Fallo Seguro y Acceso Mínimo
 
-### 5.2 Principio de No Deriva
+Ante corrupción, ambigüedad, incompatibilidad o validación insuficiente,
+CamiloBuilder DEBE detenerse sin modificar el destino ni presentar un estado
+parcial como correcto.
 
-CamiloBuilder NO DEBE mantener manualmente información que pueda descubrirse de
-forma fiable desde el sistema ejecutable.
+Cada componente DEBE acceder únicamente a los archivos, rutas y capacidades
+necesarios para su responsabilidad. La incertidumbre se resuelve mediante la
+alternativa más segura y menos destructiva.
 
-La documentación normativa y los datos derivados DEBEN permanecer separados.
-Los comandos, builders, componentes y plantillas DEBERÍAN derivarse de sus
-registros ejecutables canónicos. Los datos derivados NO DEBEN convertirse en
-una segunda fuente de verdad y DEBEN poder recalcularse.
+### 5.3 Determinismo
 
-Las decisiones, contratos, riesgos y dependencias conceptuales PUEDE que
-requieran declaración manual porque no siempre son deducibles del runtime.
+Las mismas entradas, versiones y fuentes DEBEN producir resultados equivalentes
+y auditables. Listados y salidas de máquina DEBEN mantener orden estable.
 
-### 5.3 Principio de Trazabilidad
+Red, reloj, filesystem y estado externo NO DEBEN incorporarse implícitamente.
+Cuando sean necesarios, deben proporcionarse como entradas explícitas.
 
-Cada capacidad gobernada DEBE vincularse con:
+### 5.4 Compatibilidad Explícita
 
-- Su Work Order.
-- Sus commits de implementación.
-- Las pruebas que la verifican.
-- Los contratos que crea, modifica o consume.
-- Los componentes dependientes.
-- Los riesgos conocidos.
-- Su estrategia de reversión.
+La compatibilidad DEBE declararse y verificarse proporcionalmente al riesgo; no
+se presume por intención. Un cambio incompatible exige migración, deprecación,
+ventana de transición o versión incompatible explícita.
 
-La trazabilidad DEBE funcionar desde la capacidad hacia su origen y desde la
-Work Order, contrato o componente hacia sus implementaciones. Una Work Order NO
-DEBE cerrarse sin evidencias de implementación, validación y reversión.
+Las superficies contractuales incluyen CLI, JSON público, API Python pública,
+manifests, estructura y contenido generado, idempotencia, no sobrescritura y
+formatos de máquina consumidos externamente.
 
-### 5.4 Principio de Gobernanza de Contratos
+### 5.5 Trazabilidad
 
-Todo cambio DEBE declarar, para cada contrato afectado, si:
+Todo cambio relevante DEBE poder relacionarse con su decisión, alcance,
+evidencia técnica, riesgos y reversión. La evidencia DEBE referenciar su fuente
+canónica y NO DEBE duplicarse sin una necesidad demostrable.
 
-- Crea un contrato.
-- Modifica un contrato de forma compatible.
-- Modifica un contrato de forma incompatible.
-- Depreca un contrato.
-- Elimina un contrato.
-- No afecta contratos públicos.
+La trazabilidad no exige que todo cambio utilice el mismo artefacto ni que toda
+información se mantenga dentro de una Work Order.
 
-La declaración de ausencia de impacto DEBE respaldarse mediante pruebas cuando
-el cambio atraviese una superficie pública. Un contrato estable NO DEBE cambiar
-de forma incompatible sin Work Order, clasificación mayor, migración,
-aprobación correspondiente y estrategia de reversión.
+### 5.6 Reversibilidad
 
-### 5.5 Principio de Arquitectura Viva
+Todo cambio relevante DEBE tener una estrategia realista para restaurar un
+estado seguro. Cuando una decisión no sea reversible, esa condición y sus
+consecuencias DEBEN declararse antes de adoptarla.
 
-La arquitectura DEBE verificarse continuamente mediante auditoría, pruebas y
-CI. NO DEBE limitarse a documentación estática.
+Un git revert restaura contenido técnico, pero no borra el hecho histórico de
+que una norma o decisión estuvo vigente.
 
-Toda declaración arquitectónica verificable DEBERÍA disponer de auditor,
-prueba contractual, validación de esquema o comprobación en CI. Un fallo de
-auditoría constitucional DEBE impedir declarar una versión como validada o
-publicable.
+### 5.7 Evolución Incremental
 
-Mientras la auditoría ejecutable todavía no exista, las pruebas documentales y
-la revisión de Work Orders constituyen controles transitorios, no sustitutos
-permanentes.
+Los cambios DEBEN ser pequeños, verificables y separables. La evidencia y la
+ceremonia DEBEN ser proporcionales al impacto. Un cambio rutinario no requiere
+automáticamente una Work Order.
 
-### 5.6 Principio de No Destrucción
+Los mecanismos operativos de governance PUEDEN evolucionar mediante decisiones
+arquitectónicas y cambios trazables siempre que no reduzcan estas garantías.
 
-Ninguna operación DEBE sobrescribir, truncar, reemplazar o eliminar contenido
-existente sin una acción destructiva explícita, limitada, trazable y reversible
-o respaldada por una copia recuperable.
+### 5.8 No Deriva y Autoconocimiento
 
-La ausencia de una opción destructiva explícita DEBE interpretarse como una
-obligación de preservar. Las operaciones idempotentes DEBEN conservar las
-personalizaciones existentes.
+La información derivable DEBE calcularse desde su fuente canónica. No debe
+mantenerse una segunda fuente normativa para facilitar una lectura que pueda
+realizarse de forma fiable.
 
-### 5.7 Principio de Mínimo Privilegio
+CamiloBuilder DEBE describir automáticamente aquello que sea realmente
+derivable del runtime y de fuentes gobernadas. NO DEBE fingir que puede derivar
+legitimidad, autoridad o calidad de una decisión humana.
 
-Cada módulo, builder, comando y operación DEBE acceder únicamente a los
-archivos, rutas, permisos, red y capacidades estrictamente necesarios.
+### 5.9 Simplicidad Arquitectónica
 
-Las consultas y validaciones NO DEBEN adquirir permisos de escritura. La
-generación DEBE limitarse al proyecto y componente seleccionados. Una
-ampliación de permisos DEBE ser explícita, acotada y trazable.
+No DEBE introducirse un mecanismo cuyo coste conceptual u operativo exceda el
+problema real que resuelve. Toda abstracción, registro o schema requiere un
+consumidor, una responsabilidad y una necesidad demostrables.
 
-### 5.8 Principio de Fallo Seguro
+La arquitectura se mantiene viva mediante trazabilidad, pruebas, verificaciones
+y evolución incremental, no mediante acumulación de ceremonias.
 
-Ante ambigüedad, corrupción, incompatibilidad, conflicto estructural,
-validación incompleta o falta de autoridad, CamiloBuilder DEBE detenerse sin
-modificar el destino.
+## 6. Separación entre Constitución y Governance
 
-Los errores DEBEN ser claros, usar código no cero cuando corresponda y evitar
-exponer secretos. Una entrada desconocida NO DEBE reinterpretarse como una
-operación más permisiva. La recuperación silenciosa solo PUEDE utilizarse si
-está definida por contrato y es demostrablemente segura.
+Esta Constitución gobierna garantías, invariantes, límites y precedencia.
 
-### 5.9 Principio de Determinismo
+`GOVERNANCE.md` gobierna procesos operativos como categorías de cambio, Work
+Orders, ADRs, revisión, excepciones, migraciones, versiones y releases.
 
-Las mismas entradas, versiones, plantillas, variables y condiciones
-contractuales DEBEN producir resultados equivalentes y auditables.
+La política operativa PUEDE cambiar de representación sin enmienda
+constitucional cuando preserve estas garantías. No puede reducirlas ni ocultar
+obligaciones no verificadas.
 
-Los listados, archivos inspeccionados, JSON públicos, resolución de plantillas,
-mensajes y códigos contractuales DEBEN mantener un orden y una forma estables.
-Las fechas, valores aleatorios y rutas dependientes del entorno NO DEBEN
-incorporarse implícitamente a resultados generados.
+La Constitución NO fija campos JSON, schemas, estados concretos de Work Orders,
+mecánica de commits, implementación de CI ni detalles internos del CLI,
+builders o plantillas.
 
-### 5.10 Principio de Evolución Incremental
+## 7. Metagobierno
 
-Cada cambio DEBE ser pequeño, acotado, verificable, reversible y asociado a una
-Work Order. DEBE declarar impacto contractual, riesgos, dependencias, pruebas y
-reversión.
+Un cambio de esta Constitución requiere una decisión constituyente explícita,
+impacto declarado, riesgos, evidencia y tratamiento de reversibilidad. Una
+reducción de garantías exige una nueva versión mayor.
 
-Una Work Order NO DEBE combinar refactors, capacidades y migraciones no
-relacionadas. Los bloques dependientes NO DEBERÍAN comenzar antes de validar,
-publicar y verificar el bloque anterior. La complejidad futura no justifica por
-sí sola una abstracción presente.
+Una modificación de governance que preserve garantías puede seguir el proceso
+arquitectónico definido por la política vigente. Ningún procedimiento puede
+declararse legítimo solo porque un archivo JSON lo acepte.
 
-## 6. Responsabilidades
+## 8. Conflictos y comportamiento seguro
 
-CamiloBuilder es responsable de:
+Ante conflicto entre Constitución, política, registros, código o ejecución:
 
-- Validar nombres, proyectos, manifiestos, variables, rutas y plantillas.
-- Resolver plantillas con precedencia explícita y determinista.
-- Generar proyectos y componentes dentro del destino autorizado.
-- Preservar contenido existente.
-- Proporcionar salidas y códigos conformes con sus contratos.
-- Exponer inventarios de capacidades y arquitectura cuando se implemente el
-  mecanismo constitucional correspondiente.
-- Registrar y auditar su evolución mediante Work Orders.
-- Mantener pruebas proporcionales al riesgo de cada cambio.
+1. prevalece la garantía constitucional aplicable;
+2. se detiene la publicación afectada cuando exista riesgo material;
+3. se identifica alcance y evidencia;
+4. se elige corrección, reversión o supersesión explícita;
+5. se ejecutan las verificaciones aplicables antes de reanudar.
 
-## 7. Límites
+La ambigüedad NO DEBE resolverse reduciendo garantías.
 
-CamiloBuilder no garantiza actualmente:
+## 9. Historia y legacy
 
-- Escritura transaccional ante fallos físicos.
-- Coordinación entre procesos concurrentes.
-- Ejecución o validez funcional del código generado.
-- Descarga remota de plantillas.
-- Descubrimiento dinámico de plugins.
-- Migración automática de proyectos antiguos.
+Constitution 1.0.0, GOVERNANCE 1.0.0, WORK-009, WORK-011, schemas v1/v2 y sus
+fixtures permanecen interpretables como legacy governance records.
 
-Estas limitaciones DEBEN registrarse como riesgos conocidos. Una limitación NO
-DEBE reinterpretarse como permiso para actuar de forma destructiva o insegura.
+Legacy significa preservado para lectura histórica, no obligatorio como modelo
+para nuevos cambios. No existe migración implícita ni reinterpretación
+retrospectiva.
 
-## 8. Contratos gobernados
+WORK-010 podrá documentarse posteriormente como registro histórico ligero.
+WORK-011 permanece sin cambios hasta una cancelación futura explícita de su
+alcance anterior.
 
-Son contratos gobernados, como mínimo:
+## 10. Entrada en vigor
 
-- Comandos y argumentos del CLI.
-- Textos públicos y mensajes de error.
-- Códigos de salida.
-- Salidas JSON y orden de sus campos.
-- Interfaces públicas de builders.
-- Manifiestos y resolución de plantillas.
-- Estructuras y contenido generado.
-- Reglas de idempotencia y no sobrescritura.
-- Registros arquitectónicos y de Work Orders.
+Constitution 2.0.0 entra en vigor cuando el commit coordinado que contiene esta
+Constitución, GOVERNANCE 2.0, la declaración del Maintainer y las adaptaciones
+técnicas mínimas supera la suite completa, la verificación técnica vigente y CI,
+y es publicado en la rama principal.
 
-Cada contrato DEBE tener identificador, versión, estabilidad, consumidores,
-reglas compatibles, reglas incompatibles y evidencia de prueba. Hasta que el
-registro contractual exista, las pruebas actuales y esta Constitución son la
-evidencia transitoria de los contratos vigentes.
+La declaración humana correspondiente se conserva en `MAINTAINERS.md` y la
+decisión arquitectónica en ADR-0001. La ADR documenta la decisión; no crea por
+sí sola autoridad humana.
 
-## 9. Compatibilidad
+## 11. Glosario mínimo
 
-La compatibilidad DEBE declararse y probarse; NO DEBE asumirse.
-
-Un cambio compatible PUEDE añadir comportamiento opcional sin modificar el
-comportamiento vigente. Un cambio incompatible incluye, entre otros, renombrar
-comandos, cambiar argumentos, alterar JSON estable, sobrescribir contenido
-preservado, retirar plantillas heredadas o modificar estructuras
-predeterminadas.
-
-Una deprecación DEBE proporcionar alternativa, periodo de transición, pruebas
-del comportamiento antiguo y nuevo, y una Work Order separada para la
-eliminación. Una migración DEBE ser explícita, idempotente y reversible o
-acompañada de respaldo recuperable.
-
-## 10. Versionado
-
-La versión constitucional inicial es **1.0.0** y sigue versionado semántico:
-
-- **PATCH:** enmienda E0 o corrección que no cambia significado normativo.
-- **MINOR:** enmienda E2 compatible que añade obligaciones o gobierno.
-- **MAJOR:** enmienda E3 que modifica alcance, principios o garantías.
-
-Una aclaración E1 PUEDE requerir PATCH si cambia la redacción publicada. Las
-versiones de Constitución, arquitectura, manifiestos, Work Orders, capacidades
-y contratos DEBEN evolucionar de manera independiente.
-
-## 11. Work Orders y trazabilidad
-
-WORK-009 se denomina conceptualmente **Establish CamiloBuilder Constitution**.
-
-Toda Work Order DEBE registrar, como mínimo:
-
-- Identificador y título.
-- Estado y fechas.
-- Impacto contractual.
-- Componentes afectados.
-- Dependencias.
-- Commits de implementación.
-- Pruebas ejecutadas y resultados.
-- Riesgos.
-- Estrategia de reversión.
-
-Un commit no puede contener su propio hash. Los commits de implementación DEBEN
-crearse primero y registrarse posteriormente en un commit de cierre. El commit
-de cierre se obtiene del historial y NO DEBE intentar autorreferenciarse.
-
-## 12. Auditoría
-
-El cumplimiento DEBE auditarse mediante pruebas, validaciones y, cuando se
-implemente, auditoría ejecutable y CI.
-
-La auditoría DEBE poder detectar:
-
-- Entidades registradas inexistentes.
-- Capacidades ejecutables no gobernadas.
-- Contratos sin pruebas o clasificación.
-- Dependencias desconocidas o prohibidas.
-- Builders y plantillas incoherentes.
-- Work Orders incompletas.
-- Excepciones expiradas.
-- Versiones incompatibles.
-- Deriva entre fuentes normativas y runtime.
-
-Un resultado de auditoría fallido NO DEBE declararse conforme ni publicable.
-
-## 13. Conflictos entre código y Constitución
-
-Cuando el código, una prueba, un registro o una Work Order entre en conflicto
-con esta Constitución:
-
-1. La Constitución DEBE prevalecer.
-2. El sistema afectado DEBE considerarse no conforme.
-3. La publicación afectada DEBE detenerse.
-4. DEBE abrirse una Work Order de remediación.
-5. El código DEBE revertirse o la Constitución DEBE enmendarse válidamente.
-6. Mientras no exista resolución, DEBE aplicarse el comportamiento menos
-   destructivo y más seguro.
-
-El comportamiento existente NO DEBE utilizarse como justificación automática
-para cambiar la Constitución.
-
-## 14. Enmiendas E0–E3
-
-### 14.1 E0 — Editorial
-
-Corrige ortografía, formato, enlaces o contenido descriptivo sin cambiar el
-significado normativo.
-
-Requiere aprobación de un Maintainer. No requiere cambio de versión normativa
-si el contenido publicado no cambia materialmente.
-
-### 14.2 E1 — Clarificación normativa compatible
-
-Adecua la redacción sin ampliar ni reducir materialmente una obligación.
-
-Requiere Work Order, mayoría simple de Maintainers activos y aprobación del
-Arquitecto Responsable. DEBE aportar evidencia de ausencia de cambio
-contractual.
-
-### 14.3 E2 — Nueva norma compatible
-
-Añade una obligación o mecanismo de gobierno sin debilitar principios ni romper
-contratos estables.
-
-Requiere Work Order, mayoría absoluta de Maintainers activos, aprobación del
-Arquitecto Responsable, análisis de contratos, riesgos y reversión. Incrementa
-la versión MINOR.
-
-### 14.4 E3 — Enmienda mayor
-
-Modifica o elimina principios, reduce garantías, cambia precedencia o reglas de
-aprobación, autoriza nuevas acciones destructivas o elimina contratos estables.
-
-Requiere Work Order específica, dos tercios de Maintainers activos, aprobación
-explícita del Arquitecto Responsable y revisión independiente cuando existan al
-menos dos Maintainers. DEBE incluir migración, reversión y periodo de revisión.
-Incrementa la versión MAJOR.
-
-### 14.5 Quórum y procedimiento
-
-El quórum general es de dos tercios de Maintainers activos. Si solo existe uno,
-una E3 requiere aprobación documentada y ratificación en una Work Order
-posterior tras auditoría y pruebas.
-
-Toda enmienda normativa DEBE identificar texto anterior y propuesto,
-clasificación E0–E3, contratos, compatibilidad, riesgos, pruebas, reversión,
-aprobaciones, versión y fecha de entrada en vigor.
-
-## 15. Excepciones temporales
-
-Una excepción es temporal, no modifica la Constitución, no crea precedente y
-NO DEBE utilizarse para evitar permanentemente una enmienda.
-
-Solo PUEDE concederse cuando existe necesidad concreta, la conformidad inmediata
-no es razonablemente posible, los riesgos están identificados y existen
-controles compensatorios, fecha de expiración, remediación y reversión.
-
-Toda excepción DEBE registrar:
-
-- Identificador y norma afectada.
-- Justificación y alcance exacto.
-- Componentes y contratos afectados.
-- Riesgos y controles compensatorios.
-- Responsable, inicio y expiración.
-- Work Order de remediación.
-- Criterio de cierre y reversión.
-- Aprobaciones.
-
-Una excepción ordinaria requiere Arquitecto Responsable y mayoría simple. Una
-excepción a No Destrucción, Mínimo Privilegio o Fallo Seguro requiere dos
-tercios, Arquitecto Responsable, revisión independiente cuando exista y una
-duración máxima de 30 días.
-
-Las excepciones expiran automáticamente y NO DEBEN renovarse implícitamente.
-Dos renovaciones consecutivas obligan a corregir el incumplimiento o proponer
-una enmienda. Una excepción expirada DEBE provocar fallo de auditoría.
-
-## 16. Incumplimiento y remediación
-
-Existe incumplimiento cuando una obligación normativa no se satisface y no hay
-una excepción vigente.
-
-Ante incumplimiento:
-
-1. DEBE detenerse la publicación afectada.
-2. DEBE registrarse evidencia y alcance.
-3. DEBE abrirse una Work Order de remediación.
-4. DEBEN identificarse contratos y capacidades afectadas.
-5. DEBE elegirse reversión, corrección o enmienda válida.
-6. DEBEN ejecutarse pruebas y auditoría antes del cierre.
-
-Un incumplimiento de No Destrucción, Mínimo Privilegio o Fallo Seguro DEBE
-tratarse como prioridad crítica. El silencio, la falta de auditoría o el
-desconocimiento NO DEBEN considerarse conformidad.
-
-## 17. Entrada en vigor
-
-Esta Constitución, versión 1.0.0, entra en vigor cuando el commit que la
-incorpora haya superado la suite completa, sea aprobado conforme a WORK-009 y
-sea publicado y verificado en la rama principal.
-
-Las capacidades anteriores a su entrada en vigor DEBEN inventariarse y
-auditarse de forma incremental. La entrada en vigor no convierte automáticamente
-la deuda conocida en incumplimiento crítico, pero obliga a registrarla y
-priorizarla.
-
-## 18. Glosario mínimo
-
-- **Arquitecto Responsable:** rol que custodia coherencia y decisiones
-  constitucionales.
-- **Auditoría:** comprobación reproducible entre normas, registros y runtime.
-- **Builder:** componente que valida y construye una estructura gobernada.
-- **Capacidad:** comportamiento que CamiloBuilder puede describir y ejecutar.
-- **Contrato:** comportamiento público cuya estabilidad está gobernada.
+- **ADR:** registro de una decisión arquitectónica y su razonamiento.
+- **Autoridad material:** capacidad humana y externa real para mantener y publicar el proyecto.
+- **Contrato:** comportamiento observable cuya compatibilidad está protegida.
 - **Dato derivado:** información calculable desde una fuente canónica.
-- **Excepción:** autorización temporal y trazable de incumplimiento limitado.
-- **Maintainer:** persona autorizada para aprobar cambios del repositorio.
-- **Normativo:** contenido que crea obligaciones constitucionales.
-- **Plantilla:** fuente declarativa de archivos y estructura generada.
-- **Reversión:** procedimiento para restaurar un estado conforme anterior.
-- **Runtime:** estado ejecutable del sistema y sus registros activos.
-- **Work Order:** unidad gobernada, incremental y trazable de cambio.
-
-## Anexo A — Nota descriptiva
-
-Este anexo es descriptivo y no crea obligaciones adicionales. La versión 1.0.0
-se adopta antes de implementar registros JSON, API de capacidades, auditoría
-ejecutable o CI constitucional. Esos mecanismos pertenecen a bloques posteriores
-de WORK-009 y deberán implementarse mediante Work Orders aprobadas.
+- **Legacy:** artefacto histórico preservado pero no obligatorio para nuevos cambios.
+- **Maintainer:** persona con responsabilidad material de mantenimiento.
+- **Reconstitución:** supersesión explícita que reconoce discontinuidad normativa.
+- **Reversión:** procedimiento para restaurar un estado técnico seguro.
+- **Work Order:** registro ligero de un cambio gobernado cuando su impacto lo requiere.

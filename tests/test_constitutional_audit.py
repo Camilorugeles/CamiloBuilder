@@ -200,12 +200,50 @@ class ConstitutionalAuditTests(unittest.TestCase):
     def test_current_repository_is_compliant_with_exact_control_catalog(self):
         report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=ROOT)
         self.assertEqual(report["result"], "compliant")
+        self.assertEqual(report["constitution_version"], "2.0.0")
+        self.assertEqual(report["architecture_version"], "1.3.0")
         self.assertEqual(report["summary"], {"passed": 15, "failed": 0, "excepted": 0, "indeterminate": 0})
         self.assertEqual({item[0] for item in CONTROLS}, EXPECTED_CONTROLS)
         self.assertEqual([item["id"] for item in report["controls"]], sorted(EXPECTED_CONTROLS))
         self.assertEqual(report["findings"], [])
         self.assertEqual(stable_errors(load_json(SCHEMA), report), [])
         self.assertIn("non-exhaustive", AST_ANALYSIS_SCOPE)
+        control = next(
+            item for item in report["controls"]
+            if item["id"] == "control.constitution.version"
+        )
+        self.assertEqual(control["source_ids"], ["governance/CONSTITUTION.md"])
+
+    def test_constitution_source_fails_safely_when_missing_or_invalid(self):
+        for case in ("missing", "invalid"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                copy_repository(root)
+                path = root / "governance/CONSTITUTION.md"
+                if case == "missing":
+                    path.unlink()
+                else:
+                    path.write_text("**Versión constitucional:** invalid  \n", encoding="utf-8")
+                report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+                self.assertEqual(report["result"], "indeterminate")
+                self.assertGreater(report["summary"]["indeterminate"], 0)
+
+    def test_architecture_v3_is_supported_but_work_order_v3_is_not(self):
+        self.assertEqual(
+            load_json(ROOT / "governance/architecture/registry.json")["schema_version"],
+            3,
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            copy_repository(root)
+            mutate_json(
+                root,
+                "governance/work-orders/WORK-011.json",
+                lambda value: value.update(schema_version=3),
+            )
+            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            self.assertEqual(report["result"], "non_compliant")
+            self.assertIn("unknown-schema-version", {item["code"] for item in report["findings"]})
 
     def test_requires_timezone_aware_explicit_instant(self):
         with self.assertRaises(AuditInputError):
