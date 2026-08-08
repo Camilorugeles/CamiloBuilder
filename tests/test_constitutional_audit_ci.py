@@ -78,6 +78,22 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
         self.assertEqual(re.findall(r'python-version:\s+"([^"]+)"', text), ["3.13"])
         self.assertNotIn("${{ secrets.", text)
 
+    def test_checkout_provides_complete_history_and_rejects_shallow_regressions(self):
+        text = workflow_text()
+        expected = '''      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify complete Git history
+        run: test "$(git rev-parse --is-shallow-repository)" = "false"
+'''
+        self.assertIn(expected, text)
+        self.assertEqual(re.findall(r"(?m)^\s+fetch-depth:\s*(\d+)\s*$", text), ["0"])
+        self.assertNotRegex(text, r"(?m)^\s+fetch-depth:\s*[1-9][0-9]*\s*$")
+        self.assertEqual(text.count("git rev-parse --is-shallow-repository"), 1)
+        self.assertNotRegex(text, r"(?m)^\s*(?:run:\s*)?git fetch(?:\s|$)")
+
     def test_installs_only_the_versioned_development_requirements(self):
         text = workflow_text()
         installs = re.findall(r"(?m)^\s+run:\s+(python3 -m pip install[^\n]+)$", text)
