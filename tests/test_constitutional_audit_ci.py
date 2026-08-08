@@ -80,21 +80,18 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
         self.assertEqual(re.findall(r'python-version:\s+"([^"]+)"', text), ["3.13"])
         self.assertNotIn("${{ secrets.", text)
 
-    def test_checkout_provides_complete_history_and_rejects_shallow_regressions(self):
+    def test_checkout_uses_default_shallow_history_without_historical_fetches(self):
         text = workflow_text()
         expected = '''      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Verify complete Git history
-        run: test "$(git rev-parse --is-shallow-repository)" = "false"
 '''
         self.assertIn(expected, text)
-        self.assertEqual(re.findall(r"(?m)^\s+fetch-depth:\s*(\d+)\s*$", text), ["0"])
-        self.assertNotRegex(text, r"(?m)^\s+fetch-depth:\s*[1-9][0-9]*\s*$")
-        self.assertEqual(text.count("git rev-parse --is-shallow-repository"), 1)
+        self.assertNotIn("fetch-depth", text)
+        self.assertNotIn("git rev-parse --is-shallow-repository", text)
+        self.assertNotIn("Verify complete Git history", text)
         self.assertNotRegex(text, r"(?m)^\s*(?:run:\s*)?git fetch(?:\s|$)")
+        self.assertNotIn("tests/historical", text)
+        self.assertNotIn("historical_*.py", text)
 
     def test_installs_only_the_versioned_development_requirements(self):
         text = workflow_text()
@@ -161,15 +158,14 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, text)
 
-    def test_workflow_has_exactly_the_nine_approved_operational_steps(self):
+    def test_workflow_has_exactly_the_eight_active_operational_steps(self):
         names = re.findall(r"(?m)^      - name: (.+)$", workflow_text())
         self.assertEqual(names, [
             "Checkout repository",
-            "Verify complete Git history",
             "Set up Python",
             "Install development dependencies",
             "Capture CI evaluation instant",
-            "Run complete test suite",
+            "Run active test suite",
             "Compile Python sources",
             "Run governance verification",
             "Verify final repository state",

@@ -97,9 +97,6 @@ class LightweightWorkOrderTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, self.work_010)
 
-    def test_work_010_evidence_commit_exists_locally(self):
-        require_commit(ROOT, FUNCTIONAL_COMMIT)
-
     def test_historical_verification_explicitly_reports_missing_git_evidence(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

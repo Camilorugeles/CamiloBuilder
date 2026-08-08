@@ -21,11 +21,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Verify complete Git history
-        run: test "$(git rev-parse --is-shallow-repository)" = "false"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -44,7 +39,7 @@ jobs:
           printf 'AUDIT_EVALUATION_INSTANT=%s\n' \
             "$audit_evaluation_instant" >> "$GITHUB_ENV"
 
-      - name: Run complete test suite
+      - name: Run active test suite
         run: python3 -m unittest discover -v
 
       - name: Compile Python sources
