@@ -251,8 +251,12 @@ class CapabilityIntrospectionTests(unittest.TestCase):
             shutil.copytree(ROOT / "governance", root / "governance")
             shutil.copytree(ROOT / "templates", root / "templates")
             (root / "governance/exceptions/index.json").unlink()
-            with self.assertRaises(IntrospectionError):
-                describe_camilobuilder(repository_root=root)
+            report = describe_camilobuilder(repository_root=root)
+            self.assertEqual(report["active_exceptions"], {
+                "classification": "normative_declared",
+                "source": "active governance model",
+                "items": [],
+            })
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

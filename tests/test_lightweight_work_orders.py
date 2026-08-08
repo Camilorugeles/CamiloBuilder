@@ -2,7 +2,6 @@ import hashlib
 import json
 import shutil
 import socket
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +11,10 @@ from capability_introspection import describe_camilobuilder
 from capability_introspection.work_orders import (
     WorkOrderSourceError,
     discover_work_orders,
+)
+from tests.helpers.historical_governance import (
+    HistoricalEvidenceUnavailable,
+    require_commit,
 )
 
 
@@ -48,6 +51,7 @@ class LightweightWorkOrderTests(unittest.TestCase):
 
     def _copy_governance(self, root):
         shutil.copytree(ROOT / "governance", root / "governance")
+        shutil.copytree(ROOT / "templates", root / "templates")
 
     def _mutated_root(self, mutation, *, filename="WORK-010.json"):
         temporary = tempfile.TemporaryDirectory()
@@ -94,13 +98,14 @@ class LightweightWorkOrderTests(unittest.TestCase):
             self.assertNotIn(forbidden, self.work_010)
 
     def test_work_010_evidence_commit_exists_locally(self):
-        completed = subprocess.run(
-            ["git", "cat-file", "-e", f"{FUNCTIONAL_COMMIT}^{{commit}}"],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-        )
-        self.assertEqual(completed.returncode, 0)
+        require_commit(ROOT, FUNCTIONAL_COMMIT)
+
+    def test_historical_verification_explicitly_reports_missing_git_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".git").mkdir()
+            with self.assertRaises(HistoricalEvidenceUnavailable):
+                require_commit(root, FUNCTIONAL_COMMIT)
 
     def test_discovery_combines_legacy_and_lightweight_records_in_id_order(self):
         records = discover_work_orders(ROOT)
@@ -113,18 +118,38 @@ class LightweightWorkOrderTests(unittest.TestCase):
             ],
         )
 
-    def test_legacy_index_is_not_the_discovery_source(self):
+    def test_removed_legacy_index_is_not_required(self):
+        self.assertFalse((WORK_ORDERS / "index.json").exists())
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self._copy_governance(root)
-            (root / "governance/work-orders/index.json").write_text("{", encoding="utf-8")
             self.assertEqual(
                 [item["id"] for item in discover_work_orders(root)],
                 ["WORK-009", "WORK-010", "WORK-011"],
             )
-        index = load_json(WORK_ORDERS / "index.json")
-        self.assertEqual([item["id"] for item in index], ["WORK-009", "WORK-011"])
-        self.assertEqual(index[1]["status"], "cancelled")
+
+    def test_active_discovery_does_not_resolve_commit_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._copy_governance(root)
+            (root / ".git").mkdir()
+            work_order = root / "governance/work-orders/WORK-010.json"
+            document = load_json(work_order)
+            document["evidence_refs"][0] = "commit:" + "0" * 40
+            write_json(work_order, document)
+            with mock.patch("subprocess.run", side_effect=AssertionError("Git history lookup forbidden")):
+                records = discover_work_orders(root)
+                report = describe_camilobuilder(repository_root=root)
+            self.assertEqual([item["id"] for item in records], ["WORK-009", "WORK-010", "WORK-011"])
+            self.assertEqual(
+                [item["id"] for item in report["work_orders"]["items"]],
+                ["WORK-009", "WORK-010", "WORK-011"],
+            )
+            serialized = json.dumps(report, sort_keys=True)
+            self.assertNotIn("0" * 40, serialized)
+            self.assertNotIn("commit evidence exists", serialized.lower())
+        source = (ROOT / "capability_introspection/work_orders.py").read_text(encoding="utf-8")
+        self.assertNotIn("cat-file", source)
 
     def test_introspection_uses_directory_and_preserves_public_summary(self):
         block = describe_camilobuilder(repository_root=ROOT)["work_orders"]

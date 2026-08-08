@@ -1,6 +1,5 @@
 import json
 import re
-import subprocess
 from pathlib import Path
 
 
@@ -17,6 +16,10 @@ LIGHTWEIGHT_REQUIRED = {
 }
 LIGHTWEIGHT_OPTIONAL = {"dependencies", "decision_refs", "notes"}
 LIGHTWEIGHT_STATUSES = {"proposed", "active", "done", "cancelled"}
+LEGACY_STATUSES = {
+    1: {"proposed", "approved", "in_progress", "implemented", "published", "reverted", "cancelled"},
+    2: {"proposed", "approved", "in_progress", "completed", "published", "reverted", "cancelled"},
+}
 IMPACT_LEVELS = {"compatible": 1, "deprecation": 2, "incompatible": 3}
 
 
@@ -43,25 +46,6 @@ def _validate_adr(root: Path, reference: str) -> None:
     matches = sorted(decisions.glob(f"{identifier}-*.md")) if decisions.is_dir() else []
     if len(matches) != 1 or matches[0].is_symlink() or not matches[0].is_file():
         raise WorkOrderSourceError("Unknown or unsafe ADR reference")
-
-
-def _validate_commit(root: Path, reference: str) -> None:
-    if not (root / ".git").exists():
-        return
-    commit = reference.removeprefix("commit:")
-    try:
-        completed = subprocess.run(
-            ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
-            cwd=root,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-    except OSError as error:
-        raise WorkOrderSourceError("Git commit validation unavailable") from error
-    if completed.returncode != 0:
-        raise WorkOrderSourceError("Unknown Git commit evidence")
 
 
 def _validate_lightweight(root: Path, document: dict[str, object]) -> None:
@@ -95,9 +79,7 @@ def _validate_lightweight(root: Path, document: dict[str, object]) -> None:
     if any(not DECISION_REF.fullmatch(item) for item in decisions):
         raise WorkOrderSourceError("Invalid lightweight decision reference")
     for reference in [*evidence, *decisions]:
-        if reference.startswith("commit:"):
-            _validate_commit(root, reference)
-        elif reference.startswith("adr:"):
+        if reference.startswith("adr:"):
             _validate_adr(root, reference)
 
     impact = document.get("contract_impact")
@@ -162,6 +144,16 @@ def discover_work_orders(repository_root: Path) -> list[dict[str, object]]:
                     "Unsupported legacy Work Order schema",
                     code="unknown-schema-version",
                 )
+            version = document["schema_version"]
+            schema_path = root / "governance" / "schemas" / f"v{version}" / "work-order.schema.json"
+            if schema_path.is_symlink() or not schema_path.is_file():
+                raise WorkOrderSourceError("Unavailable legacy Work Order schema")
+            try:
+                schema_path.resolve().relative_to(root.resolve())
+            except ValueError as error:
+                raise WorkOrderSourceError("Escaped legacy Work Order schema") from error
+            if document.get("status") not in LEGACY_STATUSES[version]:
+                raise WorkOrderSourceError("Invalid legacy Work Order status")
             model = "legacy"
         else:
             _validate_lightweight(root, document)
@@ -171,7 +163,11 @@ def discover_work_orders(repository_root: Path) -> list[dict[str, object]]:
             raise WorkOrderSourceError("Invalid Work Order id")
         if path.stem != identifier:
             raise WorkOrderSourceError("Work Order filename and id mismatch")
-        if not isinstance(document.get("title"), str) or not isinstance(document.get("status"), str):
+        if (
+            not isinstance(document.get("title"), str)
+            or not document["title"]
+            or not isinstance(document.get("status"), str)
+        ):
             raise WorkOrderSourceError("Incomplete Work Order summary")
         records.append({
             "id": identifier,

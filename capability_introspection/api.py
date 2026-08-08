@@ -147,22 +147,6 @@ def _templates(root: Path) -> list[dict[str, object]]:
     return sorted(items, key=lambda item: (item["component_type"], item["name"]))
 
 
-def _index(root: Path, relative_path: str, fields: set[str]) -> list[dict[str, object]]:
-    entries = _load_json(root, relative_path, expected_type=list)
-    for entry in entries:
-        if not isinstance(entry, dict) or set(entry) != fields or not isinstance(entry.get("id"), str):
-            raise IntrospectionError(f"Incoherent governed index: {relative_path}")
-        if "path" in entry:
-            document = _load_json(root, entry["path"], expected_type=dict)
-            if document.get("schema_version") != 2:
-                raise IntrospectionError(f"Unsupported governed record schema_version: {entry['path']}")
-            for field in fields - {"path"}:
-                if document.get(field) != entry[field]:
-                    raise IntrospectionError(f"Incoherent governed index: {relative_path}")
-    _unique(entries, lambda item: item["id"], relative_path)
-    return sorted(entries, key=lambda item: item["id"])
-
-
 def _limitations(root: Path, architecture: dict[str, object]) -> list[dict[str, str]]:
     observations = []
     checks = (
@@ -209,8 +193,7 @@ def _describe_camilobuilder(
         {field: item[field] for field in ("id", "title", "status", "path")}
         for item in discovered_work_orders
     ]
-    exceptions = _index(root, "governance/exceptions/index.json", {"id", "status", "path"})
-    active_exceptions = [entry for entry in exceptions if entry["status"] == "active"]
+    active_exceptions = []
     modules = sorted(architecture["modules"], key=lambda item: item["id"])
     dependencies = [
         {
@@ -254,7 +237,7 @@ def _describe_camilobuilder(
             "normative_declared", "governance/work-orders/", "items", work_orders
         ),
         "active_exceptions": _block(
-            "normative_declared", "governance/exceptions/index.json", "items", active_exceptions
+            "normative_declared", "active governance model", "items", active_exceptions
         ),
         "limitations": _block(
             "observed_state",

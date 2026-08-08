@@ -1,9 +1,8 @@
 import datetime
 import hashlib
 import json
-import subprocess
 import unittest
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 try:
     from jsonschema import Draft202012Validator, FormatChecker
@@ -14,13 +13,19 @@ except ModuleNotFoundError as error:
         "python3 -m pip install -r requirements-dev.txt"
     ) from error
 
+from tests.helpers.historical_governance import (
+    commit_timestamp_rfc3339,
+    require_ancestor,
+    require_chronological_commits,
+    require_commit,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 V1_SCHEMA_PATH = ROOT / "governance" / "schemas" / "v1" / "work-order.schema.json"
 V2_SCHEMA_PATH = ROOT / "governance" / "schemas" / "v2" / "work-order.schema.json"
 V1_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "governance" / "v1" / "valid" / "work-order.json"
 V2_FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "governance" / "v2"
-INDEX_PATH = ROOT / "governance" / "work-orders" / "index.json"
 WORK_ORDER_PATH = ROOT / "governance" / "work-orders" / "WORK-009.json"
 ARCHITECTURE_PATH = ROOT / "governance" / "architecture" / "registry.json"
 V1_SCHEMA_SHA256 = "6e3102a7cd53b7db1d421889015aa2f978e114256edeefbb25500fec8381281d"
@@ -35,7 +40,6 @@ IMPLEMENTATION_COMMITS = [
     "b586e24e680ca4a081b512f48858a247fe77ed2c",
     "a1e6e842cfdf653452c72a0de9ec7f14aa8aecdc",
 ]
-INDEX_FIELDS = {"id", "title", "status", "path"}
 TERMINAL_STATES = {"cancelled", "reverted"}
 VALID_TRANSITIONS = {
     ("proposed", "approved"),
@@ -85,16 +89,6 @@ def select_work_order_schema(document):
     return load_json(paths[version])
 
 
-def git(*arguments):
-    return subprocess.run(
-        ["git", *arguments],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-
-
 def tree_digest(paths):
     digest = hashlib.sha256()
     files = []
@@ -104,15 +98,6 @@ def tree_digest(paths):
         digest.update(path.relative_to(ROOT).as_posix().encode("utf-8"))
         digest.update(path.read_bytes())
     return digest.hexdigest()
-
-
-def is_safe_relative_path(value):
-    path = PurePosixPath(value)
-    return (
-        not path.is_absolute()
-        and value == path.as_posix()
-        and all(part not in ("", ".", "..") for part in path.parts)
-    )
 
 
 def transition_issues(document):
@@ -145,7 +130,6 @@ class WorkOrderRegistryTests(unittest.TestCase):
     def setUpClass(cls):
         cls.v1_schema = load_json(V1_SCHEMA_PATH)
         cls.v2_schema = load_json(V2_SCHEMA_PATH)
-        cls.index = load_json(INDEX_PATH)
         cls.work_order = load_json(WORK_ORDER_PATH)
         cls.valid_fixture = load_json(V2_FIXTURE_ROOT / "valid" / "work-order.json")
 
@@ -173,28 +157,10 @@ class WorkOrderRegistryTests(unittest.TestCase):
         self.assertTrue(refs)
         self.assertTrue(all(ref.startswith("#/$defs/") for ref in refs))
 
-    def test_index_contains_only_the_required_fields_and_matches_document(self):
-        self.assertEqual([entry["id"] for entry in self.index], ["WORK-009", "WORK-011"])
-        for entry in self.index:
-            self.assertEqual(set(entry), INDEX_FIELDS)
-            document = load_json(ROOT / entry["path"])
-            for field in ("id", "title", "status"):
-                self.assertEqual(entry[field], document[field])
-
-    def test_index_paths_are_local_safe_existing_unique_and_not_symlinks(self):
-        paths = [entry["path"] for entry in self.index]
-        ids = [entry["id"] for entry in self.index]
-        self.assertEqual(paths, sorted(set(paths)))
-        self.assertEqual(ids, sorted(set(ids)))
-        for value in paths:
-            self.assertTrue(is_safe_relative_path(value))
-            path = ROOT / value
-            self.assertTrue(path.is_file())
-            current = path
-            while current != ROOT:
-                self.assertFalse(current.is_symlink())
-                current = current.parent
-            path.resolve().relative_to(ROOT.resolve())
+    def test_legacy_index_has_been_removed_without_removing_records(self):
+        self.assertFalse((ROOT / "governance/work-orders/index.json").exists())
+        self.assertTrue(WORK_ORDER_PATH.is_file())
+        self.assertTrue((ROOT / "governance/work-orders/WORK-011.json").is_file())
 
     def test_work_order_validates_deterministically_without_writes_or_network(self):
         guarded = [ROOT / "governance", V2_FIXTURE_ROOT]
@@ -241,7 +207,7 @@ class WorkOrderRegistryTests(unittest.TestCase):
 
     def test_status_history_is_continuous_real_and_ends_in_current_state(self):
         self.assertEqual(transition_issues(self.work_order), [])
-        first_commit_date = git("show", "-s", "--format=%cI", IMPLEMENTATION_COMMITS[0])
+        first_commit_date = commit_timestamp_rfc3339(ROOT, IMPLEMENTATION_COMMITS[0])
         self.assertEqual(self.work_order["created_at"], first_commit_date)
         self.assertEqual(self.work_order["status_history"][0]["at"], first_commit_date)
         completed_transition = self.work_order["status_history"][-2]
@@ -260,27 +226,21 @@ class WorkOrderRegistryTests(unittest.TestCase):
         commits = self.work_order["implementation_commit_ids"]
         self.assertEqual(commits, IMPLEMENTATION_COMMITS)
         self.assertEqual(len(commits), len(set(commits)))
-        timestamps = []
         for commit in commits:
             with self.subTest(commit=commit):
                 self.assertEqual(len(commit), 40)
-                self.assertEqual(git("cat-file", "-t", commit), "commit")
-                subprocess.run(["git", "merge-base", "--is-ancestor", commit, "HEAD"], cwd=ROOT, check=True)
-                subprocess.run(["git", "merge-base", "--is-ancestor", commit, "origin/main"], cwd=ROOT, check=True)
-                timestamps.append(int(git("show", "-s", "--format=%ct", commit)))
-        self.assertEqual(timestamps, sorted(timestamps))
+                require_commit(ROOT, commit)
+                require_ancestor(ROOT, commit, "HEAD")
+                require_ancestor(ROOT, commit, "origin/main")
+        require_chronological_commits(ROOT, commits)
 
     def test_implementation_and_closure_commits_are_separate_without_self_reference(self):
         self.assertIn("implementation_commit_ids", self.work_order)
         closure_commit = self.work_order["registry_closure_commit_id"]
         self.assertEqual(closure_commit, "759360f02622905cba971695472ef10de4a24aa6")
         self.assertNotIn(closure_commit, self.work_order["implementation_commit_ids"])
-        self.assertEqual(git("cat-file", "-t", closure_commit), "commit")
-        subprocess.run(
-            ["git", "merge-base", "--is-ancestor", closure_commit, "origin/main"],
-            cwd=ROOT,
-            check=True,
-        )
+        require_commit(ROOT, closure_commit)
+        require_ancestor(ROOT, closure_commit, "origin/main")
         self.assertIn("registry_closure_commit_id", self.v2_schema["properties"])
         self.assertNotIn("registry_closure_commit_id", self.v2_schema["required"])
 

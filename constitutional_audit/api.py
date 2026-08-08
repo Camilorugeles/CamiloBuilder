@@ -18,7 +18,6 @@ from constitutional_audit.controls import (
 from constitutional_audit.validation import (
     AST_ANALYSIS_SCOPE,
     EXCEPTION_TRANSITIONS,
-    WORK_ORDER_TRANSITIONS,
     SourceError,
     ValidationUnavailable,
     architecture_issues,
@@ -52,11 +51,11 @@ CONTROL_SOURCES = {
     "control.architecture.registry-schema": ["governance/architecture/registry.json", "governance/schemas/v3/architecture.schema.json"],
     "control.architecture.runtime-coherence": ["governance/architecture/registry.json", "repository static Python imports"],
     "control.constitution.version": ["governance/CONSTITUTION.md"],
-    "control.exceptions.integrity": ["governance/exceptions/index.json"],
-    "control.exceptions.temporal-validity": ["governance/exceptions/index.json"],
+    "control.exceptions.integrity": ["active governance model"],
+    "control.exceptions.temporal-validity": ["active governance model"],
     "control.governance.manual-assertion-sources": ["governance/MAINTAINERS.md"],
     "control.introspection.coherence": ["capability_introspection.describe_camilobuilder"],
-    "control.references.integrity": ["governance/architecture/registry.json", "governance/work-orders/", "governance/exceptions/index.json"],
+    "control.references.integrity": ["governance/architecture/registry.json", "governance/work-orders/"],
     "control.schemas.references": ["governance/schemas"],
     "control.schemas.selection": ["governance/schemas"],
     "control.schemas.validation": ["governance/schemas", "governance architecture and registry documents"],
@@ -85,26 +84,6 @@ def _finding(control_id, outcome, code, source_id, subject_ids):
 
 def _add(findings, control_id, outcome, code, source_id, *subjects):
     findings.append(_finding(control_id, outcome, code, source_id, list(subjects)))
-
-
-def _load_index(root, relative_path, fields):
-    entries = load_json(root, relative_path, list)
-    ids = []
-    paths = []
-    documents = []
-    for entry in entries:
-        if not isinstance(entry, dict) or set(entry) != fields or not isinstance(entry.get("id"), str):
-            raise SourceError("incoherent-index")
-        ids.append(entry["id"])
-        paths.append(entry["path"])
-        document = load_json(root, entry["path"], dict)
-        for field in fields - {"path"}:
-            if document.get(field) != entry[field]:
-                raise SourceError("incoherent-index")
-        documents.append(document)
-    if ids != sorted(set(ids)) or paths != sorted(set(paths)):
-        raise SourceError("unordered-index")
-    return entries, documents
 
 
 def _schema_path(record_type, version):
@@ -235,10 +214,6 @@ def _unverified_obligations():
 def _perform_audit(root, instant):
     findings = []
     architecture = None
-    work_orders = []
-    exception_documents = []
-    valid_active_exceptions = []
-    exception_index = []
     schema_validation_available = True
     constitution_version = None
 
@@ -337,75 +312,20 @@ def _perform_audit(root, instant):
             {field: item[field] for field in ("id", "title", "status", "path")}
             for item in discovered_work_orders
         ]
-        work_orders = [item["document"] for item in discovered_work_orders]
         known_work_orders = {item["id"] for item in discovered_work_orders}
-        for item in discovered_work_orders:
-            if item["model"] != "legacy":
-                continue
-            document = item["document"]
-            try:
-                errors = _validate_record(root, "work-order", document)
-                if errors:
-                    _add(findings, "control.work-orders.integrity", "failed", "work-order-schema-invalid", item["path"], item["id"])
-            except ValidationUnavailable:
-                schema_validation_available = False
-                _add(findings, "control.work-orders.integrity", "indeterminate", "schema-validation-unavailable", item["path"], item["id"])
-            except SourceError as error:
-                _add(findings, "control.work-orders.integrity", "failed", str(error), item["path"], item["id"])
-            for issue in history_issues(document, WORK_ORDER_TRANSITIONS):
-                _add(findings, "control.work-orders.integrity", "failed", issue, item["path"], item["id"])
     except WorkOrderSourceError as error:
+        discovered_work_orders = []
         work_order_index = []
         known_work_orders = set()
         _add(findings, "control.work-orders.integrity", "failed", error.code, "governance/work-orders/", "governance.work-orders")
 
-    known_contracts = set(architecture.get("contract_ids", [])) if architecture else set()
     if architecture is not None:
-        for document in work_orders:
-            work_id = document.get("id", "governance.work-orders")
-            for contract in sorted(set(document.get("affected_contract_ids", [])) - known_contracts):
-                _add(findings, "control.references.integrity", "failed", "unknown-work-order-contract", "governance/work-orders/", contract)
-            dependencies = document.get("dependency_ids", document.get("dependencies", []))
+        for item in discovered_work_orders:
+            if item["model"] != "lightweight":
+                continue
+            dependencies = item["document"].get("dependencies", [])
             for dependency in sorted(set(dependencies) - known_work_orders):
                 _add(findings, "control.references.integrity", "failed", "unknown-work-order-dependency", "governance/work-orders/", dependency)
-
-    exception_registry_valid = True
-    try:
-        exception_index, exception_documents = _load_index(
-            root, "governance/exceptions/index.json", {"id", "status", "path"}
-        )
-        for entry, document in zip(exception_index, exception_documents):
-            valid_document = True
-            try:
-                if document.get("schema_version") not in {1, 2}:
-                    valid_document = False
-                    _add(findings, "control.schemas.selection", "failed", "unknown-schema-version", entry["path"], entry["id"])
-                errors = _validate_record(root, "exception", document)
-                if errors:
-                    valid_document = False
-                    _add(findings, "control.exceptions.integrity", "failed", "exception-schema-invalid", entry["path"], entry["id"])
-            except ValidationUnavailable:
-                schema_validation_available = False
-                valid_document = False
-                exception_registry_valid = False
-                _add(findings, "control.exceptions.integrity", "indeterminate", "exception-validation-unavailable", entry["path"], entry["id"])
-            except SourceError as error:
-                valid_document = False
-                _add(findings, "control.exceptions.integrity", "failed", str(error), entry["path"], entry["id"])
-            semantic = _exception_semantic_issues(document, instant, known_contracts, known_work_orders)
-            for issue in semantic:
-                control = "control.exceptions.temporal-validity" if issue in {
-                    "active-exception-expired", "active-exception-not-started",
-                    "expired-exception", "invalid-exception-date", "invalid-exception-date-order"
-                } else "control.references.integrity" if issue.startswith("unknown-") else "control.exceptions.integrity"
-                _add(findings, control, "failed", issue, entry["path"], entry["id"])
-                valid_document = False
-            if valid_document and document.get("status") == "active":
-                valid_active_exceptions.append(document)
-    except SourceError as error:
-        exception_registry_valid = False
-        outcome = "failed" if str(error) in {"incoherent-index", "unordered-index"} else "indeterminate"
-        _add(findings, "control.exceptions.integrity", outcome, "exception-registry-invalid", "governance/exceptions/index.json", "governance.exceptions")
 
     if not schema_validation_available:
         _add(findings, "control.schemas.validation", "indeterminate", "schema-validation-unavailable", "governance/schemas", "governance.schemas")
@@ -429,9 +349,6 @@ def _perform_audit(root, instant):
             }
             for module in sorted(architecture["modules"], key=lambda item: item["id"])
         ]
-        expected_active_exceptions = [
-            entry for entry in exception_index if entry["status"] == "active"
-        ]
         if (
             description["identity"]["value"]["id"] != architecture.get("id")
             or
@@ -440,19 +357,11 @@ def _perform_audit(root, instant):
             or description["contracts"]["items"] != sorted(architecture.get("contract_ids", []))
             or description["architectural_dependencies"]["items"] != expected_dependencies
             or description["work_orders"]["items"] != work_order_index
-            or description["active_exceptions"]["items"] != expected_active_exceptions
+            or description["active_exceptions"]["items"] != []
         ):
             _add(findings, "control.introspection.coherence", "failed", "introspection-source-mismatch", "capability_introspection.describe_camilobuilder", "architecture.camilobuilder")
     except (IntrospectionError, KeyError, TypeError, UnboundLocalError):
         _add(findings, "control.introspection.coherence", "indeterminate", "introspection-unavailable", "capability_introspection.describe_camilobuilder", "architecture.camilobuilder")
-
-    if exception_registry_valid:
-        for finding in findings:
-            for exception in sorted(valid_active_exceptions, key=lambda item: item["id"]):
-                if _exception_covers(exception, finding, instant):
-                    finding["outcome"] = "excepted"
-                    finding["exception_id"] = exception["id"]
-                    break
 
     findings.sort(key=lambda item: (
         item["control_id"], item["code"], item["source_id"], tuple(item["subject_ids"])
@@ -461,17 +370,6 @@ def _perform_audit(root, instant):
         finding["id"] = f"finding.{index:03d}"
 
     declared_exceptions = []
-    for entry in sorted(exception_index, key=lambda item: item["id"]):
-        exception_id = entry["id"]
-        declared_exceptions.append({
-            "id": exception_id,
-            "source_id": entry["path"],
-            "status": entry["status"],
-            "applied_finding_ids": [
-                item["id"] for item in findings
-                if item["exception_id"] == exception_id
-            ],
-        })
 
     controls = []
     for control_id in sorted(CONTROL_BY_ID):

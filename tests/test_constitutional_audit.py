@@ -321,7 +321,7 @@ class ConstitutionalAuditTests(unittest.TestCase):
                 report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
                 self.assertEqual(report["automated_result"], "failed")
 
-    def test_detects_work_order_incoherence_and_broken_reference(self):
+    def test_active_verification_reads_only_legacy_summary_fields(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             copy_repository(root)
@@ -334,17 +334,29 @@ class ConstitutionalAuditTests(unittest.TestCase):
                 audit_camilobuilder(
                     evaluation_instant=INSTANT, repository_root=root
                 )["automated_result"],
-                "failed",
+                "verified",
             )
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             copy_repository(root)
             mutate_json(root, "governance/work-orders/WORK-009.json", lambda value: value["affected_contract_ids"].append("contract.unknown"))
             report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            self.assertEqual(report["automated_result"], "verified")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            copy_repository(root)
+            mutate_json(root, "governance/work-orders/WORK-011.json", lambda value: value.update(status="unknown"))
+            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
             self.assertEqual(report["automated_result"], "failed")
-            self.assertIn("unknown-work-order-contract", {item["code"] for item in report["findings"]})
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            copy_repository(root)
+            mutate_json(root, "governance/work-orders/WORK-010.json", lambda value: value.update(dependencies=["WORK-999"]))
+            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            self.assertEqual(report["automated_result"], "failed")
+            self.assertIn("unknown-work-order-dependency", {item["code"] for item in report["findings"]})
 
-    def test_valid_active_exception_can_produce_verified_with_declared_exceptions(self):
+    def test_legacy_exception_registry_is_not_an_active_verification_source(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             copy_repository(root)
@@ -354,29 +366,12 @@ class ConstitutionalAuditTests(unittest.TestCase):
             mutate_json(root, "governance/architecture/registry.json", disorder)
             install_exception(root, covering=True)
             report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
-            self.assertEqual(report["automated_result"], "verified_with_declared_exceptions")
-            self.assertEqual([item["id"] for item in report["declared_exceptions"] if item["status"] == "active"], ["EXCEPTION-001"])
-            self.assertTrue(any(item["outcome"] == "excepted" for item in report["findings"]))
-
-    def test_exception_without_subject_coverage_does_not_excuse_failure(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            copy_repository(root)
-            def disorder(value):
-                builders = next(item for item in value["modules"] if item["id"] == "module.builders")
-                builders["consumes_contract_ids"] = list(reversed(builders["consumes_contract_ids"]))
-            mutate_json(root, "governance/architecture/registry.json", disorder)
-            install_exception(root, covering=True)
-            mutate_json(root, "governance/exceptions/EXCEPTION-001.json", lambda value: value.update(affected_component_ids=["module.cli"]))
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
             self.assertEqual(report["automated_result"], "failed")
+            self.assertEqual(report["declared_exceptions"], [])
+            self.assertFalse(any(item["outcome"] == "excepted" for item in report["findings"]))
 
-    def test_expired_critical_incomplete_closed_and_revoked_exceptions(self):
-        expected = {
-            "expired": "failed", "not-started": "failed",
-            "critical": "failed", "closed": "verified", "revoked": "verified"
-        }
-        for case, result in expected.items():
+    def test_all_legacy_exception_states_are_ignored_by_active_verification(self):
+        for case in ("active", "expired", "not-started", "critical", "closed", "revoked"):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 copy_repository(root)
@@ -399,9 +394,38 @@ class ConstitutionalAuditTests(unittest.TestCase):
                 else:
                     install_exception(root, status=case)
                 report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
-                self.assertEqual(report["automated_result"], result)
-                if case in {"closed", "revoked"}:
-                    self.assertEqual([item for item in report["declared_exceptions"] if item["status"] == "active"], [])
+                self.assertEqual(report["automated_result"], "verified")
+                self.assertEqual(report["declared_exceptions"], [])
+                statuses = {
+                    item["id"]: item["status"] for item in report["automated_controls"]
+                }
+                self.assertEqual(statuses["control.exceptions.integrity"], "passed")
+                self.assertEqual(statuses["control.exceptions.temporal-validity"], "passed")
+
+    def test_active_verification_does_not_require_the_legacy_exception_index(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            copy_repository(root)
+            (root / "governance/exceptions/index.json").unlink()
+            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            self.assertEqual(report["automated_result"], "verified")
+            self.assertEqual(report["declared_exceptions"], [])
+
+    def test_active_verification_does_not_require_historical_git_objects(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            copy_repository(root)
+            (root / ".git").mkdir()
+            mutate_json(
+                root,
+                "governance/work-orders/WORK-010.json",
+                lambda value: value["evidence_refs"].__setitem__(0, "commit:" + "0" * 40),
+            )
+            with mock.patch("subprocess.run", side_effect=AssertionError("Git history lookup forbidden")):
+                report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            self.assertEqual(report["automated_result"], "verified")
+            self.assertEqual(report["automated_summary"]["failed"], 0)
+            self.assertEqual(report["automated_summary"]["indeterminate"], 0)
 
     def test_introspection_mismatch_fails_technical_verification(self):
         real = audit_api.describe_camilobuilder(repository_root=ROOT)

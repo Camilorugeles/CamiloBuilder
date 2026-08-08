@@ -14,11 +14,11 @@ except ModuleNotFoundError as error:
     ) from error
 
 from constitutional_audit import audit_camilobuilder
+from capability_introspection.work_orders import discover_work_orders
 
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK_ORDER_PATH = ROOT / "governance/work-orders/WORK-011.json"
-INDEX_PATH = ROOT / "governance/work-orders/index.json"
 SCHEMA_PATH = ROOT / "governance/schemas/v2/work-order.schema.json"
 WORK_009_PATH = ROOT / "governance/work-orders/WORK-009.json"
 EXPECTED_CREATED_AT = "2026-08-08T16:05:06+02:00"
@@ -37,7 +37,6 @@ class WorkOrder011RegistryTests(unittest.TestCase):
     def setUpClass(cls):
         cls.document = load_json(WORK_ORDER_PATH)
         cls.schema = load_json(SCHEMA_PATH)
-        cls.index = load_json(INDEX_PATH)
 
     def test_cancelled_record_validates_with_published_work_order_schema_v2(self):
         validator = Draft202012Validator(
@@ -77,8 +76,7 @@ class WorkOrder011RegistryTests(unittest.TestCase):
         ])
         self.assertEqual(self.document["affected_capability_ids"], [])
         self.assertEqual(self.document["dependency_ids"], ["WORK-009"])
-        work_009_entry = next(item for item in self.index if item["id"] == "WORK-009")
-        self.assertEqual(work_009_entry["status"], "published")
+        self.assertEqual(load_json(WORK_009_PATH)["status"], "published")
 
     def test_cancellation_preserves_empty_implementation_and_adds_one_real_transition(self):
         self.assertEqual(self.document["implementation_commit_ids"], [])
@@ -119,15 +117,12 @@ class WorkOrder011RegistryTests(unittest.TestCase):
         ):
             self.assertIn(phrase, reversal)
 
-    def test_index_is_ordered_closed_and_coherent(self):
-        self.assertEqual([item["id"] for item in self.index], ["WORK-009", "WORK-011"])
-        for item in self.index:
-            self.assertEqual(set(item), {"id", "title", "status", "path"})
-            document = load_json(ROOT / item["path"])
-            self.assertEqual(
-                {key: document[key] for key in ("id", "title", "status")},
-                {key: item[key] for key in ("id", "title", "status")},
-            )
+    def test_directory_discovery_replaces_the_removed_legacy_index(self):
+        self.assertFalse((ROOT / "governance/work-orders/index.json").exists())
+        self.assertEqual(
+            [item["id"] for item in discover_work_orders(ROOT)],
+            ["WORK-009", "WORK-010", "WORK-011"],
+        )
 
     def test_work_009_and_historical_schemas_are_byte_for_byte_intact(self):
         self.assertEqual(hashlib.sha256(WORK_009_PATH.read_bytes()).hexdigest(), WORK_009_SHA256)

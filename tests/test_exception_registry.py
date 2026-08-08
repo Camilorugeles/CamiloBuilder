@@ -21,7 +21,7 @@ V1_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "governance" / "v1" / "valid" / 
 V2_FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "governance" / "v2"
 INDEX_PATH = ROOT / "governance" / "exceptions" / "index.json"
 ARCHITECTURE_PATH = ROOT / "governance" / "architecture" / "registry.json"
-WORK_ORDER_INDEX_PATH = ROOT / "governance" / "work-orders" / "index.json"
+WORK_ORDERS_PATH = ROOT / "governance" / "work-orders"
 WORK_ORDER_PATH = ROOT / "governance" / "work-orders" / "WORK-009.json"
 V1_SCHEMA_SHA256 = "d554fe81c766b744df79c40c185af6c4685faac8fa7927edf7639ff5240e80c8"
 EXPLICIT_VALIDATION_INSTANT = datetime.datetime.fromisoformat("2026-01-10T10:00:00+00:00")
@@ -131,7 +131,9 @@ def semantic_issues(document, validation_instant):
     known_contracts = set(load_json(ARCHITECTURE_PATH)["contract_ids"])
     for contract_id in sorted(set(document["affected_contract_ids"]) - known_contracts):
         issues.append(("unknown-contract", contract_id))
-    known_work_orders = {entry["id"] for entry in load_json(WORK_ORDER_INDEX_PATH)}
+    known_work_orders = {
+        load_json(path)["id"] for path in WORK_ORDERS_PATH.glob("WORK-*.json")
+    }
     if document["remediation_work_order_id"] not in known_work_orders:
         issues.append(("unknown-work-order", document["remediation_work_order_id"]))
     if document["affected_capability_ids"]:
