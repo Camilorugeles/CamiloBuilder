@@ -89,8 +89,12 @@ jobs:
               instant = datetime.fromisoformat(raw_instant.replace("Z", "+00:00"))
               report = audit_camilobuilder(evaluation_instant=instant)
               findings = report["findings"]
-              active_ids = report["active_exception_ids"]
-              controls = report["controls"]
+              declared_exceptions = report["declared_exceptions"]
+              active_ids = [
+                  item["id"] for item in declared_exceptions
+                  if item["status"] == "active"
+              ]
+              controls = report["automated_controls"]
               calculated_summary = {
                   "passed": sum(item["status"] == "passed" for item in controls),
                   "failed": sum(item["status"] == "failed" for item in controls),
@@ -122,6 +126,22 @@ jobs:
                   item for item in excepted_findings
                   if item["exception_id"] not in active_ids
               ]
+              applied_ids_by_exception = {
+                  item["id"]: sorted(item["applied_finding_ids"])
+                  for item in declared_exceptions
+              }
+              actual_ids_by_exception = {
+                  exception_id: sorted(
+                      item["id"] for item in excepted_findings
+                      if item["exception_id"] == exception_id
+                  )
+                  for exception_id in active_ids
+              }
+              inconsistent_exception_evidence = any(
+                  applied_ids_by_exception.get(exception_id, [])
+                  != actual_ids_by_exception.get(exception_id, [])
+                  for exception_id in active_ids
+              )
               expired_findings = [
                   item for item in findings
                   if item["code"] in {
@@ -129,9 +149,11 @@ jobs:
                       "expired-exception",
                   }
               ]
-              internally_consistent = report["summary"] == calculated_summary
+              internally_consistent = (
+                  report["automated_summary"] == calculated_summary
+              )
               accepted = (
-                  report["result"] == "compliant"
+                  report["automated_result"] == "verified"
                   and not material_failures
                   and not material_control_failures
                   and not indeterminate_findings
@@ -139,7 +161,7 @@ jobs:
                   and not excepted_findings
                   and internally_consistent
               )
-              if report["result"] == "compliant_with_exceptions":
+              if report["automated_result"] == "verified_with_declared_exceptions":
                   accepted = (
                       bool(active_ids)
                       and bool(excepted_findings)
@@ -148,29 +170,34 @@ jobs:
                       and not indeterminate_findings
                       and not indeterminate_controls
                       and not invalid_exception_links
+                      and not inconsistent_exception_evidence
                       and not expired_findings
                       and internally_consistent
                   )
               diagnostic = {
-                  "active_exception_ids": active_ids,
+                  "automated_result": report["automated_result"],
+                  "automated_summary": report["automated_summary"],
+                  "declared_exceptions": declared_exceptions,
                   "evaluation_instant": report["evaluation_instant"],
                   "findings": findings,
-                  "result": report["result"],
-                  "summary": report["summary"],
+                  "manual_assertions": report["manual_assertions"],
+                  "unverified_obligations": report["unverified_obligations"],
               }
           except Exception:
               accepted = False
               diagnostic = {
-                  "active_exception_ids": [],
-                  "evaluation_instant": raw_instant,
-                  "findings": [],
-                  "result": "indeterminate",
-                  "summary": {
+                  "automated_result": "indeterminate",
+                  "automated_summary": {
                       "excepted": 0,
                       "failed": 0,
                       "indeterminate": 1,
                       "passed": 0,
                   },
+                  "declared_exceptions": [],
+                  "evaluation_instant": raw_instant,
+                  "findings": [],
+                  "manual_assertions": [],
+                  "unverified_obligations": [],
               }
 
           print(json.dumps(

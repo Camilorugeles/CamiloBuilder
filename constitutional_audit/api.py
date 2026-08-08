@@ -6,7 +6,11 @@ from capability_introspection.constitution import (
     ConstitutionSourceError,
     read_constitution_version,
 )
-from constitutional_audit.controls import CONTROL_BY_ID
+from constitutional_audit.controls import (
+    CONTROL_BY_ID,
+    MANUAL_ASSERTIONS,
+    UNVERIFIED_OBLIGATIONS,
+)
 from constitutional_audit.validation import (
     AST_ANALYSIS_SCOPE,
     EXCEPTION_TRANSITIONS,
@@ -28,6 +32,7 @@ CRITICAL_PROVISIONS = {
     "principle.failure-safe",
     "principle.least-privilege",
     "principle.non-destruction",
+    "principle.safe-failure-minimum-access",
 }
 NON_EXCUSABLE_CODES = {
     "constitution-version-unknown",
@@ -45,6 +50,7 @@ CONTROL_SOURCES = {
     "control.constitution.version": ["governance/CONSTITUTION.md"],
     "control.exceptions.integrity": ["governance/exceptions/index.json"],
     "control.exceptions.temporal-validity": ["governance/exceptions/index.json"],
+    "control.governance.manual-assertion-sources": ["governance/MAINTAINERS.md"],
     "control.introspection.coherence": ["capability_introspection.describe_camilobuilder"],
     "control.references.integrity": ["governance/architecture/registry.json", "governance/work-orders/index.json", "governance/exceptions/index.json"],
     "control.schemas.references": ["governance/schemas"],
@@ -176,12 +182,50 @@ def _classify_result(controls):
         item["status"] == "failed" and item["severity"] in {"critical", "error"}
         for item in controls
     ):
-        return "non_compliant"
+        return "failed"
     if any(item["status"] == "indeterminate" for item in controls):
         return "indeterminate"
     if any(item["status"] == "excepted" for item in controls):
-        return "compliant_with_exceptions"
-    return "compliant"
+        return "verified_with_declared_exceptions"
+    return "verified"
+
+
+def _manual_assertions(root):
+    source = "governance/MAINTAINERS.md"
+    try:
+        text = safe_path(root, source).read_text(encoding="utf-8")
+        prefix = "**Última confirmación:** "
+        date_lines = [line for line in text.splitlines() if line.startswith(prefix)]
+        if len(date_lines) != 1:
+            raise SourceError("invalid-maintainer-confirmation-date")
+        confirmed_at = datetime.fromisoformat(date_lines[0].removeprefix(prefix))
+        if confirmed_at.tzinfo is None or confirmed_at.utcoffset() is None:
+            raise SourceError("invalid-maintainer-confirmation-date")
+        if any(marker not in text for _id, _title, _source, marker in MANUAL_ASSERTIONS):
+            raise SourceError("incomplete-maintainer-declarations")
+        status = "declared"
+        issue = None
+    except (OSError, UnicodeDecodeError, ValueError, SourceError) as error:
+        status = "unavailable"
+        issue = str(error) if isinstance(error, SourceError) else "maintainer-source-unavailable"
+    assertions = [
+        {
+            "id": assertion_id,
+            "title": title,
+            "source_id": assertion_source,
+            "declaration_status": status,
+            "verification_scope": "presence_only",
+        }
+        for assertion_id, title, assertion_source, _marker in MANUAL_ASSERTIONS
+    ]
+    return assertions, issue
+
+
+def _unverified_obligations():
+    return [
+        {"id": item_id, "title": title, "source_id": source, "reason": reason}
+        for item_id, title, source, reason in UNVERIFIED_OBLIGATIONS
+    ]
 
 
 def _perform_audit(root, instant):
@@ -190,8 +234,20 @@ def _perform_audit(root, instant):
     work_orders = []
     exception_documents = []
     valid_active_exceptions = []
+    exception_index = []
     schema_validation_available = True
     constitution_version = None
+
+    manual_assertions, assertion_issue = _manual_assertions(root)
+    if assertion_issue:
+        _add(
+            findings,
+            "control.governance.manual-assertion-sources",
+            "indeterminate",
+            assertion_issue,
+            "governance/MAINTAINERS.md",
+            "governance.maintainers",
+        )
 
     try:
         architecture = load_json(root, "governance/architecture/registry.json", dict)
@@ -395,6 +451,19 @@ def _perform_audit(root, instant):
     for index, finding in enumerate(findings, 1):
         finding["id"] = f"finding.{index:03d}"
 
+    declared_exceptions = []
+    for entry in sorted(exception_index, key=lambda item: item["id"]):
+        exception_id = entry["id"]
+        declared_exceptions.append({
+            "id": exception_id,
+            "source_id": entry["path"],
+            "status": entry["status"],
+            "applied_finding_ids": [
+                item["id"] for item in findings
+                if item["exception_id"] == exception_id
+            ],
+        })
+
     controls = []
     for control_id in sorted(CONTROL_BY_ID):
         related = [item for item in findings if item["control_id"] == control_id]
@@ -418,22 +487,24 @@ def _perform_audit(root, instant):
         })
 
     result = _classify_result(controls)
-    summary = {
+    automated_summary = {
         "passed": sum(item["status"] == "passed" for item in controls),
         "failed": sum(item["status"] == "failed" for item in controls),
         "excepted": sum(item["status"] == "excepted" for item in controls),
         "indeterminate": sum(item["status"] == "indeterminate" for item in controls),
     }
     return {
-        "schema_version": 1,
-        "report_version": "1.0.0",
+        "schema_version": 2,
+        "report_version": "2.0.0",
         "evaluation_instant": instant.isoformat(),
-        "result": result,
+        "automated_result": result,
         "constitution_version": constitution_version or "unknown",
         "architecture_version": architecture.get("architecture_version", "unknown") if architecture else "unknown",
-        "summary": summary,
-        "active_exception_ids": sorted(item["id"] for item in valid_active_exceptions),
-        "controls": controls,
+        "automated_summary": automated_summary,
+        "automated_controls": controls,
+        "manual_assertions": manual_assertions,
+        "unverified_obligations": _unverified_obligations(),
+        "declared_exceptions": declared_exceptions,
         "findings": findings,
     }
 
@@ -472,9 +543,19 @@ def audit_camilobuilder(
                 "exception_ids": [],
             })
         return {
-            "schema_version": 1, "report_version": "1.0.0",
-            "evaluation_instant": evaluation_instant.isoformat(), "result": "indeterminate",
+            "schema_version": 2, "report_version": "2.0.0",
+            "evaluation_instant": evaluation_instant.isoformat(), "automated_result": "indeterminate",
             "constitution_version": "unknown", "architecture_version": "unknown",
-            "summary": {"passed": 0, "failed": 0, "excepted": 0, "indeterminate": len(controls)},
-            "active_exception_ids": [], "controls": controls, "findings": findings,
+            "automated_summary": {"passed": 0, "failed": 0, "excepted": 0, "indeterminate": len(controls)},
+            "automated_controls": controls,
+            "manual_assertions": [
+                {
+                    "id": assertion_id, "title": title, "source_id": source,
+                    "declaration_status": "unavailable",
+                    "verification_scope": "presence_only",
+                }
+                for assertion_id, title, source, _marker in MANUAL_ASSERTIONS
+            ],
+            "unverified_obligations": _unverified_obligations(),
+            "declared_exceptions": [], "findings": findings,
         }

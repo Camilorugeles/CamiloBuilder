@@ -14,11 +14,13 @@ WORK_ORDER_PATH = ROOT / "governance/work-orders/WORK-009.json"
 MANUAL_INSTANT = "2026-08-07T17:45:00+00:00"
 PUBLISHED_POLICY_COMMIT = "a1e6e842cfdf653452c72a0de9ec7f14aa8aecdc"
 DIAGNOSTIC_FIELDS = {
+    "automated_result",
+    "automated_summary",
+    "declared_exceptions",
     "evaluation_instant",
-    "result",
-    "summary",
-    "active_exception_ids",
     "findings",
+    "manual_assertions",
+    "unverified_obligations",
 }
 
 
@@ -158,7 +160,9 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
         diagnostic = json.loads(lines[0])
         self.assertEqual(set(diagnostic), DIAGNOSTIC_FIELDS)
         self.assertEqual(diagnostic["evaluation_instant"], MANUAL_INSTANT)
-        self.assertEqual(diagnostic["result"], "compliant")
+        self.assertEqual(diagnostic["automated_result"], "verified")
+        self.assertTrue(diagnostic["manual_assertions"])
+        self.assertTrue(diagnostic["unverified_obligations"])
         self.assertNotIn(str(ROOT), first.stdout)
 
     def test_result_policy_fails_safe_and_conditions_exceptions(self):
@@ -168,13 +172,13 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
             package.mkdir()
             package.joinpath("__init__.py").write_text(self._fake_audit_module(), encoding="utf-8")
             expected = {
-                "compliant": 0,
-                "compliant_with_exceptions": 0,
+                "verified": 0,
+                "verified_with_declared_exceptions": 0,
                 "exception_without_active_id": 1,
                 "exception_invalid_link": 1,
                 "exception_expired": 1,
                 "material_failure": 1,
-                "non_compliant": 1,
+                "failed": 1,
                 "indeterminate": 1,
                 "contradictory_summary": 1,
             }
@@ -206,37 +210,39 @@ class AuditInputError(ValueError):
 
 def audit_camilobuilder(*, evaluation_instant, repository_root=None):
     case = os.environ["AUDIT_FAKE_CASE"]
-    result = case if case in {"compliant", "compliant_with_exceptions", "non_compliant", "indeterminate"} else "compliant_with_exceptions"
-    active_ids = ["EXCEPTION-001"] if result == "compliant_with_exceptions" else []
+    result = case if case in {"verified", "verified_with_declared_exceptions", "failed", "indeterminate"} else "verified_with_declared_exceptions"
+    declared = [{"id": "EXCEPTION-001", "source_id": "governance/exceptions/EXCEPTION-001.json", "status": "active", "applied_finding_ids": ["finding.001"]}] if result == "verified_with_declared_exceptions" else []
     status = "passed"
     findings = []
-    if result == "compliant_with_exceptions":
+    if result == "verified_with_declared_exceptions":
         status = "excepted"
-        findings = [{"outcome": "excepted", "severity": "error", "exception_id": "EXCEPTION-001", "code": "synthetic-exception"}]
-    elif result == "non_compliant":
+        findings = [{"id": "finding.001", "outcome": "excepted", "severity": "error", "exception_id": "EXCEPTION-001", "code": "synthetic-exception"}]
+    elif result == "failed":
         status = "failed"
-        findings = [{"outcome": "failed", "severity": "error", "exception_id": None, "code": "synthetic-failure"}]
+        findings = [{"id": "finding.001", "outcome": "failed", "severity": "error", "exception_id": None, "code": "synthetic-failure"}]
     elif result == "indeterminate":
         status = "indeterminate"
-        findings = [{"outcome": "indeterminate", "severity": "error", "exception_id": None, "code": "synthetic-indeterminate"}]
+        findings = [{"id": "finding.001", "outcome": "indeterminate", "severity": "error", "exception_id": None, "code": "synthetic-indeterminate"}]
     if case == "exception_without_active_id":
-        active_ids = []
+        declared = []
     if case == "exception_invalid_link":
         findings[0]["exception_id"] = "EXCEPTION-999"
     if case == "exception_expired":
         findings[0]["code"] = "expired-exception"
     if case == "material_failure":
-        findings.append({"outcome": "failed", "severity": "critical", "exception_id": None, "code": "synthetic-failure"})
+        findings.append({"id": "finding.002", "outcome": "failed", "severity": "critical", "exception_id": None, "code": "synthetic-failure"})
     summary = {"passed": status == "passed", "failed": status == "failed", "excepted": status == "excepted", "indeterminate": status == "indeterminate"}
     if case == "contradictory_summary":
         summary["passed"] = 99
     return {
         "evaluation_instant": evaluation_instant.isoformat(),
-        "result": result,
-        "summary": summary,
-        "active_exception_ids": active_ids,
+        "automated_result": result,
+        "automated_summary": summary,
+        "declared_exceptions": declared,
         "findings": findings,
-        "controls": [{"status": status, "severity": "error"}],
+        "automated_controls": [{"status": status, "severity": "error"}],
+        "manual_assertions": [{"id": "assertion.synthetic", "verification_scope": "presence_only"}],
+        "unverified_obligations": [{"id": "obligation.synthetic"}],
     }
 '''
 

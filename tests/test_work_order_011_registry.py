@@ -120,14 +120,14 @@ class WorkOrder011RegistryTests(unittest.TestCase):
         )
         self.assertEqual(hashlib.sha256(SCHEMA_PATH.read_bytes()).hexdigest(), V2_SCHEMA_SHA256)
 
-    def test_current_repository_remains_constitutionally_compliant(self):
+    def test_current_repository_remains_technically_verified(self):
         report = audit_camilobuilder(
             evaluation_instant=datetime.datetime.fromisoformat("2026-08-08T14:05:06+00:00"),
             repository_root=ROOT,
         )
-        self.assertEqual(report["result"], "compliant")
-        self.assertEqual(report["summary"]["failed"], 0)
-        self.assertEqual(report["summary"]["indeterminate"], 0)
+        self.assertEqual(report["automated_result"], "verified")
+        self.assertEqual(report["automated_summary"]["failed"], 0)
+        self.assertEqual(report["automated_summary"]["indeterminate"], 0)
 
 
 if __name__ == "__main__":

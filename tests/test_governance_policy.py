@@ -86,7 +86,7 @@ class GovernancePolicyTests(unittest.TestCase):
             evaluation_instant=EVALUATION_INSTANT,
             repository_root=ROOT,
         )
-        self.assertEqual(report["result"], "compliant")
+        self.assertEqual(report["automated_result"], "verified")
 
     def test_legacy_work_orders_are_byte_for_byte_intact(self):
         self.assertEqual(hashlib.sha256(WORK_009_PATH.read_bytes()).hexdigest(), WORK_009_SHA256)
