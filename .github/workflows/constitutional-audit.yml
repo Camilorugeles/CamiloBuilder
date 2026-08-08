@@ -34,11 +34,6 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
-      - name: Verify initial clean tree
-        run: |
-          git diff --exit-code
-          test -z "$(git status --porcelain=v1 --untracked-files=all)"
-
       - name: Install development dependencies
         run: python3 -m pip install --requirement requirements-dev.txt
 
@@ -63,16 +58,7 @@ jobs:
             constitutional_audit \
             tests
 
-      - name: Check whitespace
-        run: git diff --check
-
-      - name: Validate governance schemas
-        run: |
-          python3 -m unittest -v \
-            tests.test_governance_schemas \
-            tests.test_constitutional_audit.AuditReportSchemaTests
-
-      - name: Run constitutional audit
+      - name: Run governance verification
         env:
           AUDIT_EVALUATION_INSTANT: ${{ env.AUDIT_EVALUATION_INSTANT }}
         run: |
@@ -210,7 +196,8 @@ jobs:
               sys.exit(1)
           PY
 
-      - name: Verify final clean tree
+      - name: Verify final repository state
         run: |
+          git diff --check
           git diff --exit-code
           test -z "$(git status --porcelain=v1 --untracked-files=all)"

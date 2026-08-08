@@ -124,30 +124,56 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
 
     def test_runs_all_required_validations(self):
         text = workflow_text()
-        self.assertIn("python3 -m unittest discover -v", text)
+        self.assertEqual(text.count("python3 -m unittest discover -v"), 1)
         self.assertIn("python3 -m compileall -q", text)
         for target in (
             "builder.py", "builder_cli.py", "builders", "template_system",
             "capability_introspection", "constitutional_audit", "tests",
         ):
             self.assertIn(target, text)
-        self.assertIn("git diff --check", text)
-        self.assertIn("tests.test_governance_schemas", text)
-        self.assertIn("tests.test_constitutional_audit.AuditReportSchemaTests", text)
+        self.assertNotIn("Validate governance schemas", text)
+        self.assertNotIn("tests.test_governance_schemas", text)
+        self.assertNotIn("tests.test_constitutional_audit.AuditReportSchemaTests", text)
+        self.assertIn("- name: Run governance verification", text)
+        self.assertNotIn("- name: Run constitutional audit", text)
         self.assertIn("audit_camilobuilder(evaluation_instant=instant)", text)
 
-    def test_checks_the_complete_tree_before_and_after_without_repair(self):
+    def test_checks_repository_state_once_at_the_end_without_repair(self):
         text = workflow_text()
-        self.assertEqual(text.count("git diff --exit-code"), 2)
+        self.assertNotIn("Verify initial clean tree", text)
+        self.assertNotIn("- name: Check whitespace", text)
+        final = text.split("      - name: Verify final repository state\n", 1)[1]
+        self.assertEqual(final.count("git diff --check"), 1)
+        self.assertEqual(final.count("git diff --exit-code"), 1)
+        self.assertEqual(
+            final.count('test -z "$(git status --porcelain=v1 --untracked-files=all)"'),
+            1,
+        )
+        self.assertEqual(text.count("git diff --check"), 1)
+        self.assertEqual(text.count("git diff --exit-code"), 1)
         self.assertEqual(
             text.count('test -z "$(git status --porcelain=v1 --untracked-files=all)"'),
-            2,
+            1,
         )
         for forbidden in (
             "git add", "git commit", "git push", "git reset", "git checkout --",
-            "git clean",
+            "git clean", "gh api", "gh run", "curl api.github.com",
         ):
             self.assertNotIn(forbidden, text)
+
+    def test_workflow_has_exactly_the_nine_approved_operational_steps(self):
+        names = re.findall(r"(?m)^      - name: (.+)$", workflow_text())
+        self.assertEqual(names, [
+            "Checkout repository",
+            "Verify complete Git history",
+            "Set up Python",
+            "Install development dependencies",
+            "Capture CI evaluation instant",
+            "Run complete test suite",
+            "Compile Python sources",
+            "Run governance verification",
+            "Verify final repository state",
+        ])
 
     def test_adapter_emits_one_stable_json_and_is_locally_reproducible(self):
         first = run_adapter()

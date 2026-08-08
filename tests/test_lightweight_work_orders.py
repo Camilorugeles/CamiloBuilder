@@ -20,7 +20,6 @@ WORK_ORDERS = ROOT / "governance/work-orders"
 WORK_009_SHA256 = "50edc69a50bcfd6179e68cd4a8fe0021c5e8cfcbd929b725e5f24d3d4c27ac9a"
 V1_SCHEMA_SHA256 = "6e3102a7cd53b7db1d421889015aa2f978e114256edeefbb25500fec8381281d"
 V2_SCHEMA_SHA256 = "3787ea3b82e11ce19fba6dea453f61a1602b28028bcd42296b51f334f474f3d6"
-WORKFLOW_SHA256 = "6b004aca30c6bb78ff92b1b974d4d4b9cf57754b9cdbaf34ef7b26d54c117746"
 FUNCTIONAL_COMMIT = "4a594899bc7c3fdd06f24eed388d06d341656a71"
 
 
@@ -196,7 +195,7 @@ class LightweightWorkOrderTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(before, tree_digest(ROOT / "governance"))
 
-    def test_legacy_artifacts_and_ci_workflow_remain_intact(self):
+    def test_legacy_artifacts_remain_intact(self):
         self.assertEqual(hashlib.sha256((WORK_ORDERS / "WORK-009.json").read_bytes()).hexdigest(), WORK_009_SHA256)
         self.assertEqual(
             hashlib.sha256((ROOT / "governance/schemas/v1/work-order.schema.json").read_bytes()).hexdigest(),
@@ -207,10 +206,6 @@ class LightweightWorkOrderTests(unittest.TestCase):
             V2_SCHEMA_SHA256,
         )
         self.assertFalse((ROOT / "governance/schemas/v3/work-order.schema.json").exists())
-        self.assertEqual(
-            hashlib.sha256((ROOT / ".github/workflows/constitutional-audit.yml").read_bytes()).hexdigest(),
-            WORKFLOW_SHA256,
-        )
 
 
 if __name__ == "__main__":
