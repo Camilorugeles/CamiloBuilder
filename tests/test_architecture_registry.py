@@ -285,9 +285,24 @@ class ArchitectureRegistryTests(unittest.TestCase):
 
     def test_registry_versions_are_the_governed_initial_versions(self):
         self.assertEqual(self.registry["schema_version"], 3)
-        self.assertEqual(self.registry["record_version"], "2.0.0")
+        self.assertEqual(self.registry["record_version"], "2.0.1")
         self.assertEqual(self.registry["architecture_version"], "1.3.0")
         self.assertNotIn("constitution_version", self.registry)
+
+    def test_constitutional_audit_responsibilities_match_active_verification(self):
+        modules = {module["id"]: module for module in self.registry["modules"]}
+        responsibilities = modules["module.constitutional-audit"]["responsibilities"]
+        self.assertEqual(
+            responsibilities,
+            [
+                "Expose manual assertions and unverified obligations separately",
+                "Produce deterministic reports from governed local sources",
+                "Verify automated technical controls without side effects",
+            ],
+        )
+        obsolete_claims = " ".join(responsibilities).lower()
+        for phrase in ("constitutional compliance", "explicit instant", "evaluate governed exceptions"):
+            self.assertNotIn(phrase, obsolete_claims)
 
     def test_registry_contains_no_derived_inventories(self):
         present = DERIVED_INVENTORY_FIELDS.intersection(self.registry)

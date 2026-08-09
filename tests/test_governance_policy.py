@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "governance/GOVERNANCE.md"
 ARCHITECTURE_PATH = ROOT / "governance/architecture/registry.json"
 WORK_009_PATH = ROOT / "governance/work-orders/WORK-009.json"
+WORK_010_PATH = ROOT / "governance/work-orders/WORK-010.json"
 WORK_011_PATH = ROOT / "governance/work-orders/WORK-011.json"
 WORK_009_SHA256 = "50edc69a50bcfd6179e68cd4a8fe0021c5e8cfcbd929b725e5f24d3d4c27ac9a"
 
@@ -64,11 +65,21 @@ class GovernancePolicyTests(unittest.TestCase):
         for source in ("Git es la fuente canónica", "GitHub es la fuente externa", "CI es la fuente"):
             self.assertIn(source, self.policy)
         self.assertRegex(self.policy, r"No certifica legitimidad\s+humana total")
-        self.assertIn("obligaciones no verificadas", self.policy)
+        for category in ("`automated_controls`", "`manual_assertions`", "`unverified_obligations`"):
+            self.assertIn(category, self.policy)
+        self.assertIn("resultado `verified` significa únicamente", self.policy)
+        self.assertNotIn("El modelo futuro separará", self.policy)
+        self.assertNotIn("La nomenclatura `compliant`", self.policy)
+
+    def test_policy_describes_the_active_exception_boundary(self):
+        self.assertIn("no dispone actualmente de un mecanismo ejecutable activo", self.policy)
+        self.assertIn("la verificación activa no admite excepciones", self.policy)
+        self.assertIn("cambio gobernado\nexplícito", self.policy)
+        self.assertNotIn("No se crea EXCEPTION-001", self.policy)
 
     def test_architecture_document_changes_without_architecture_relationship_change(self):
         self.assertEqual(self.architecture["schema_version"], 3)
-        self.assertEqual(self.architecture["record_version"], "2.0.0")
+        self.assertEqual(self.architecture["record_version"], "2.0.1")
         self.assertEqual(self.architecture["architecture_version"], "1.3.0")
         self.assertNotIn("constitution_version", self.architecture)
         modules = {item["id"]: item for item in self.architecture["modules"]}
@@ -91,6 +102,18 @@ class GovernancePolicyTests(unittest.TestCase):
             (work_011["schema_version"], work_011["record_version"], work_011["status"]),
             (2, "0.1.1", "cancelled"),
         )
+
+    def test_policy_describes_current_work_order_states(self):
+        work_010 = json.loads(WORK_010_PATH.read_text(encoding="utf-8"))
+        work_011 = json.loads(WORK_011_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(work_010["status"], "done")
+        self.assertEqual(work_011["status"], "cancelled")
+        self.assertIn("WORK-010 existe", self.policy)
+        self.assertIn("estado `done`", self.policy)
+        self.assertIn("WORK-011 permanece", self.policy)
+        self.assertIn("estado `cancelled`", self.policy)
+        self.assertNotIn("WORK-010 podrá", self.policy)
+        self.assertNotIn("permanece `proposed`", self.policy)
 
     def test_policy_contains_no_derived_runtime_inventory_or_commit_hash(self):
         for value in ("create-project", "ProjectBuilder", "AgentBuilder", "ServiceBuilder"):

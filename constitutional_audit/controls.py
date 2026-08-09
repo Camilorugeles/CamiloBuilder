@@ -12,7 +12,7 @@ CONTROLS = (
     ("control.schemas.references", "Local schema references", "critical", "principle.safe-failure-minimum-access"),
     ("control.schemas.selection", "Explicit schema selection", "error", "principle.determinism"),
     ("control.schemas.validation", "Machine-consumed governed document schema validation", "critical", "principle.safe-failure-minimum-access"),
-    ("control.work-orders.integrity", "Legacy Work Order registry integrity", "error", "principle.incremental-evolution"),
+    ("control.work-orders.integrity", "Active and legacy Work Order integrity", "error", "principle.incremental-evolution"),
 )
 
 

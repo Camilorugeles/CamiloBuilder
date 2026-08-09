@@ -188,11 +188,14 @@ Una excepción es una autorización humana temporal frente a una obligación
 concreta. Debe declarar alcance, responsable, expiración, riesgos, controles
 compensatorios, remediación y cierre.
 
-Una excepción expirada no justifica avance. El software puede verificar
-estructura y tiempo, pero no debe afirmar que ha demostrado legitimidad humana
-o calidad de la decisión.
+Governance 2.0 no dispone actualmente de un mecanismo ejecutable activo para
+registrar o aplicar excepciones. Los schemas e índices de excepciones anteriores
+son artefactos legacy legibles, pero la verificación activa no admite excepciones
+declaradas ni los reactiva o reinterpreta.
 
-No se crea EXCEPTION-001 ni se amplía el modelo legacy durante este cutover.
+Introducir un mecanismo futuro de excepciones requiere un cambio gobernado
+explícito. El software podrá verificar su estructura y aplicabilidad técnica,
+pero no afirmar legitimidad humana ni calidad de la decisión.
 
 ## 12. Versionado y releases
 
@@ -229,19 +232,21 @@ interpretables para sus documentos históricos.
 La auditoría automatizada verifica controles técnicos. No certifica legitimidad
 humana total, independencia real ni corrección conceptual de una decisión.
 
-El modelo futuro separará controles automatizados, afirmaciones manuales y
-obligaciones no verificadas. Una obligación no automatizada debe permanecer
-visible. La nomenclatura `compliant` se mantiene transitoriamente hasta adaptar
-el contrato de informe en un bloque posterior.
+Governance verification separa `automated_controls`, `manual_assertions` y
+`unverified_obligations`. Una obligación no automatizada permanece visible. El
+resultado `verified` significa únicamente que pasaron todos los controles
+técnicos automatizados obligatorios y aplicables; no significa conformidad
+constitucional total, legitimidad humana ni validación de decisiones humanas.
 
 ## 16. Legacy
 
-WORK-009, WORK-011, Constitution 1.0, GOVERNANCE 1.0 y schemas v1/v2 permanecen
-históricos e interpretables. No se reescriben ni migran implícitamente.
+WORK-009 permanece como registro legacy publicado e intacto. WORK-010 existe
+como registro histórico ligero en estado `done`. WORK-011 permanece como
+registro legacy schema v2 en estado `cancelled`. Constitution 1.0, GOVERNANCE
+1.0 y los schemas v1/v2 continúan históricos e interpretables.
 
-Los formatos legacy no son obligatorios para nuevos cambios. WORK-010 podrá
-registrarse como nota histórica ligera. WORK-011 será cancelada explícitamente
-en un bloque posterior; permanece `proposed` durante este cutover.
+Los registros históricos no se reescriben ni migran implícitamente, y los
+formatos legacy no son obligatorios para nuevos cambios.
 
 ## 17. Modificación de esta política
 
