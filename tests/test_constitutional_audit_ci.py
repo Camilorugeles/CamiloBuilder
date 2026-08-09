@@ -72,14 +72,14 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
     def test_uses_only_approved_official_actions_and_python(self):
         text = workflow_text()
         actions = re.findall(r"(?m)^\s+uses:\s+([^\s]+)$", text)
-        self.assertEqual(actions, ["actions/checkout@v4", "actions/setup-python@v5"])
+        self.assertEqual(actions, ["actions/checkout@v7", "actions/setup-python@v7"])
         self.assertEqual(re.findall(r'python-version:\s+"([^"]+)"', text), ["3.13"])
         self.assertNotIn("${{ secrets.", text)
 
     def test_checkout_uses_default_shallow_history_without_historical_fetches(self):
         text = workflow_text()
         expected = '''      - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 '''
         self.assertIn(expected, text)
         self.assertNotIn("fetch-depth", text)

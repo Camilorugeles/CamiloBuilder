@@ -35,7 +35,7 @@ class HistoricalGovernanceWorkflowTests(unittest.TestCase):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertEqual(
             re.findall(r"(?m)^\s+uses:\s+([^\s]+)$", text),
-            ["actions/checkout@v4", "actions/setup-python@v5"],
+            ["actions/checkout@v7", "actions/setup-python@v7"],
         )
         self.assertEqual(re.findall(r'python-version:\s+"([^"]+)"', text), ["3.13"])
         self.assertEqual(
