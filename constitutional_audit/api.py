@@ -30,7 +30,7 @@ from constitutional_audit.validation import (
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[1]
 ACTIVE_SCHEMA_PATHS = (
-    "governance/schemas/v2/audit-report.schema.json",
+    "governance/schemas/v3/audit-report.schema.json",
     "governance/schemas/v3/architecture.schema.json",
 )
 CONTROL_SOURCES = {
@@ -51,10 +51,6 @@ CONTROL_SOURCES = {
 }
 
 
-class AuditInputError(ValueError):
-    """Raised before auditing when the explicit evaluation instant is invalid."""
-
-
 def _finding(control_id, outcome, code, source_id, subject_ids):
     control = CONTROL_BY_ID[control_id]
     return {
@@ -66,7 +62,6 @@ def _finding(control_id, outcome, code, source_id, subject_ids):
         "source_id": source_id,
         "constitutional_provision": control["constitutional_provision"],
         "subject_ids": sorted(set(subject_ids)),
-        "exception_id": None,
     }
 
 
@@ -96,6 +91,8 @@ def _validate_record(root, record_type, document):
 
 
 def _classify_result(controls):
+    if any(item["status"] not in {"passed", "failed", "indeterminate"} for item in controls):
+        return "indeterminate"
     if any(
         item["status"] == "failed" and item["severity"] in {"critical", "error"}
         for item in controls
@@ -103,8 +100,6 @@ def _classify_result(controls):
         return "failed"
     if any(item["status"] == "indeterminate" for item in controls):
         return "indeterminate"
-    if any(item["status"] == "excepted" for item in controls):
-        return "verified_with_declared_exceptions"
     return "verified"
 
 
@@ -146,7 +141,7 @@ def _unverified_obligations():
     ]
 
 
-def _perform_audit(root, instant):
+def _perform_audit(root):
     findings = []
     architecture = None
     schema_validation_available = True
@@ -299,8 +294,6 @@ def _perform_audit(root, instant):
     for index, finding in enumerate(findings, 1):
         finding["id"] = f"finding.{index:03d}"
 
-    declared_exceptions = []
-
     controls = []
     for control_id in sorted(CONTROL_BY_ID):
         related = [item for item in findings if item["control_id"] == control_id]
@@ -309,8 +302,6 @@ def _perform_audit(root, instant):
             status = "failed"
         elif "indeterminate" in outcomes:
             status = "indeterminate"
-        elif "excepted" in outcomes:
-            status = "excepted"
         else:
             status = "passed"
         controls.append({
@@ -320,20 +311,17 @@ def _perform_audit(root, instant):
             "status": status,
             "source_ids": sorted(CONTROL_SOURCES[control_id]),
             "finding_ids": [item["id"] for item in related],
-            "exception_ids": sorted({item["exception_id"] for item in related if item["exception_id"]}),
         })
 
     result = _classify_result(controls)
     automated_summary = {
         "passed": sum(item["status"] == "passed" for item in controls),
         "failed": sum(item["status"] == "failed" for item in controls),
-        "excepted": sum(item["status"] == "excepted" for item in controls),
         "indeterminate": sum(item["status"] == "indeterminate" for item in controls),
     }
     return {
-        "schema_version": 2,
-        "report_version": "2.0.0",
-        "evaluation_instant": instant.isoformat(),
+        "schema_version": 3,
+        "report_version": "3.0.0",
         "automated_result": result,
         "constitution_version": constitution_version or "unknown",
         "architecture_version": architecture.get("architecture_version", "unknown") if architecture else "unknown",
@@ -341,25 +329,19 @@ def _perform_audit(root, instant):
         "automated_controls": controls,
         "manual_assertions": manual_assertions,
         "unverified_obligations": _unverified_obligations(),
-        "declared_exceptions": declared_exceptions,
         "findings": findings,
     }
 
 
 def audit_camilobuilder(
     *,
-    evaluation_instant: datetime,
     repository_root: Path | None = None,
 ) -> dict[str, object]:
-    if not isinstance(evaluation_instant, datetime) or evaluation_instant.tzinfo is None or evaluation_instant.utcoffset() is None:
-        raise AuditInputError("evaluation_instant must be a timezone-aware datetime")
     root = Path(repository_root) if repository_root is not None else DEFAULT_ROOT
     try:
         if root.is_symlink() or not root.is_dir():
             raise SourceError("invalid-repository-root")
-        return _perform_audit(root, evaluation_instant)
-    except AuditInputError:
-        raise
+        return _perform_audit(root)
     except Exception:
         controls = []
         findings = []
@@ -377,13 +359,12 @@ def audit_camilobuilder(
                 "status": "indeterminate",
                 "source_ids": sorted(CONTROL_SOURCES[control_id]),
                 "finding_ids": [finding["id"]],
-                "exception_ids": [],
             })
         return {
-            "schema_version": 2, "report_version": "2.0.0",
-            "evaluation_instant": evaluation_instant.isoformat(), "automated_result": "indeterminate",
+            "schema_version": 3, "report_version": "3.0.0",
+            "automated_result": "indeterminate",
             "constitution_version": "unknown", "architecture_version": "unknown",
-            "automated_summary": {"passed": 0, "failed": 0, "excepted": 0, "indeterminate": len(controls)},
+            "automated_summary": {"passed": 0, "failed": 0, "indeterminate": len(controls)},
             "automated_controls": controls,
             "manual_assertions": [
                 {
@@ -394,5 +375,5 @@ def audit_camilobuilder(
                 for assertion_id, title, source, _marker in MANUAL_ASSERTIONS
             ],
             "unverified_obligations": _unverified_obligations(),
-            "declared_exceptions": [], "findings": findings,
+            "findings": findings,
         }

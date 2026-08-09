@@ -134,7 +134,6 @@ class WorkOrder011RegistryTests(unittest.TestCase):
 
     def test_current_repository_remains_technically_verified(self):
         report = audit_camilobuilder(
-            evaluation_instant=datetime.datetime.fromisoformat("2026-08-08T14:05:06+00:00"),
             repository_root=ROOT,
         )
         self.assertEqual(report["automated_result"], "verified")

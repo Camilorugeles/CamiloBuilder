@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://camilobuilder.dev/governance/schemas/v3/audit-report.schema.json",
+  "title": "CamiloBuilder governance verification report schema v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "report_version",
+    "automated_result", "constitution_version", "architecture_version",
+    "automated_summary", "automated_controls", "manual_assertions",
+    "unverified_obligations", "findings"
+  ],
+  "properties": {
+    "schema_version": { "const": 3 },
+    "report_version": { "$ref": "#/$defs/semver" },
+    "automated_result": {
+      "enum": [
+        "verified", "failed", "indeterminate"
+      ]
+    },
+    "constitution_version": { "$ref": "#/$defs/versionOrUnknown" },
+    "architecture_version": { "$ref": "#/$defs/versionOrUnknown" },
+    "automated_summary": { "$ref": "#/$defs/summary" },
+    "automated_controls": {
+      "type": "array", "minItems": 1,
+      "items": { "$ref": "#/$defs/control" }, "uniqueItems": true
+    },
+    "manual_assertions": {
+      "type": "array", "minItems": 1,
+      "items": { "$ref": "#/$defs/manualAssertion" }, "uniqueItems": true
+    },
+    "unverified_obligations": {
+      "type": "array", "minItems": 1,
+      "items": { "$ref": "#/$defs/unverifiedObligation" }, "uniqueItems": true
+    },
+    "findings": {
+      "type": "array", "items": { "$ref": "#/$defs/finding" },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "versionOrUnknown": {
+      "oneOf": [{ "$ref": "#/$defs/semver" }, { "const": "unknown" }]
+    },
+    "severity": { "enum": ["critical", "error", "warning"] },
+    "controlStatus": { "enum": ["passed", "failed", "indeterminate"] },
+    "findingOutcome": { "enum": ["failed", "indeterminate"] },
+    "strings": {
+      "type": "array", "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["passed", "failed", "indeterminate"],
+      "properties": {
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "indeterminate": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "control": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "id", "title", "severity", "status", "source_ids",
+        "finding_ids"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^control\\.[a-z0-9.-]+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "severity": { "$ref": "#/$defs/severity" },
+        "status": { "$ref": "#/$defs/controlStatus" },
+        "source_ids": { "$ref": "#/$defs/strings" },
+        "finding_ids": { "$ref": "#/$defs/strings" }
+      }
+    },
+    "manualAssertion": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "id", "title", "source_id", "declaration_status", "verification_scope"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^assertion\\.[a-z0-9.-]+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "source_id": { "type": "string", "minLength": 1 },
+        "declaration_status": { "enum": ["declared", "unavailable"] },
+        "verification_scope": { "const": "presence_only" }
+      }
+    },
+    "unverifiedObligation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "source_id", "reason"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^obligation\\.[a-z0-9.-]+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "source_id": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "finding": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "id", "control_id", "severity", "outcome", "code", "message",
+        "source_id", "constitutional_provision", "subject_ids"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^finding\\.[0-9]{3,}$" },
+        "control_id": { "type": "string", "pattern": "^control\\.[a-z0-9.-]+$" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "outcome": { "$ref": "#/$defs/findingOutcome" },
+        "code": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "message": { "type": "string", "minLength": 1 },
+        "source_id": { "type": "string", "minLength": 1 },
+        "constitutional_provision": {
+          "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+        },
+        "subject_ids": { "$ref": "#/$defs/strings" }
+      }
+    }
+  }
+}

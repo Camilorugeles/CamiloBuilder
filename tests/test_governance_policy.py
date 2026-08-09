@@ -2,7 +2,6 @@ import hashlib
 import json
 import re
 import unittest
-from datetime import datetime
 from pathlib import Path
 
 from capability_introspection import describe_camilobuilder
@@ -15,7 +14,6 @@ ARCHITECTURE_PATH = ROOT / "governance/architecture/registry.json"
 WORK_009_PATH = ROOT / "governance/work-orders/WORK-009.json"
 WORK_011_PATH = ROOT / "governance/work-orders/WORK-011.json"
 WORK_009_SHA256 = "50edc69a50bcfd6179e68cd4a8fe0021c5e8cfcbd929b725e5f24d3d4c27ac9a"
-EVALUATION_INSTANT = datetime.fromisoformat("2026-08-08T15:46:16+00:00")
 
 
 class GovernancePolicyTests(unittest.TestCase):
@@ -82,7 +80,6 @@ class GovernancePolicyTests(unittest.TestCase):
         self.assertEqual(description["constitution_version"]["value"], "2.0.0")
         self.assertEqual(description["architecture_version"]["value"], "1.3.0")
         report = audit_camilobuilder(
-            evaluation_instant=EVALUATION_INSTANT,
             repository_root=ROOT,
         )
         self.assertEqual(report["automated_result"], "verified")

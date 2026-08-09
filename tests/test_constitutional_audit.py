@@ -8,7 +8,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -22,7 +21,8 @@ except ModuleNotFoundError as error:
     ) from error
 
 import constitutional_audit.api as audit_api
-from constitutional_audit import AuditInputError, audit_camilobuilder
+import constitutional_audit
+from constitutional_audit import audit_camilobuilder
 from constitutional_audit.controls import CONTROLS, MANUAL_ASSERTIONS, UNVERIFIED_OBLIGATIONS
 from constitutional_audit.validation import AST_ANALYSIS_SCOPE, ValidationUnavailable
 
@@ -30,10 +30,12 @@ from constitutional_audit.validation import AST_ANALYSIS_SCOPE, ValidationUnavai
 ROOT = Path(__file__).resolve().parents[1]
 V1_SCHEMA = ROOT / "governance/schemas/v1/audit-report.schema.json"
 V2_SCHEMA = ROOT / "governance/schemas/v2/audit-report.schema.json"
+V3_SCHEMA = ROOT / "governance/schemas/v3/audit-report.schema.json"
 V1_FIXTURES = ROOT / "tests/fixtures/governance/audit/v1"
 V2_FIXTURES = ROOT / "tests/fixtures/governance/audit/v2"
+V3_FIXTURES = ROOT / "tests/fixtures/governance/audit/v3"
 V1_SCHEMA_SHA256 = "3f54aed74a6f6a6f0943a48a82af12674b71d8b0a68f011c0dab88def0f4b727"
-INSTANT = datetime.fromisoformat("2026-08-07T12:00:00+00:00")
+V2_SCHEMA_SHA256 = "e2fec5b627c6830bc659cac4457dfa76a69cb57c8f3998fa9f3db50191da2cd6"
 EXPECTED_CONTROLS = {
     "control.constitution.version",
     "control.schemas.selection",
@@ -161,11 +163,20 @@ def install_exception(root, status="active", *, covering=False, critical_incompl
 
 
 class AuditReportSchemaTests(unittest.TestCase):
-    def test_v1_is_byte_for_byte_intact_and_v2_is_closed_local_draft_2020_12(self):
+    def test_v1_is_intact_and_v3_is_closed_local_draft_2020_12(self):
         self.assertEqual(hashlib.sha256(V1_SCHEMA.read_bytes()).hexdigest(), V1_SCHEMA_SHA256)
-        schema = load_json(V2_SCHEMA)
+        self.assertEqual(hashlib.sha256(V2_SCHEMA.read_bytes()).hexdigest(), V2_SCHEMA_SHA256)
+        schema = load_json(V3_SCHEMA)
         self.assertEqual(schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
-        self.assertEqual(schema["properties"]["schema_version"], {"const": 2})
+        self.assertEqual(schema["properties"]["schema_version"], {"const": 3})
+        self.assertNotIn("evaluation_instant", schema["properties"])
+        self.assertNotIn("declared_exceptions", schema["properties"])
+        serialized = json.dumps(schema, sort_keys=True)
+        for forbidden in (
+            "verified_with_declared_exceptions", "excepted", "exception_ids",
+            "exception_id", "declaredException",
+        ):
+            self.assertNotIn(forbidden, serialized)
         Draft202012Validator.check_schema(schema)
         nodes = list(self._nodes(schema))
         objects = [item for item in nodes if isinstance(item, dict) and item.get("type") == "object"]
@@ -173,30 +184,59 @@ class AuditReportSchemaTests(unittest.TestCase):
         refs = [item["$ref"] for item in nodes if isinstance(item, dict) and "$ref" in item]
         self.assertTrue(all(reference.startswith("#/$defs/") for reference in refs))
 
-    def test_v1_and_v2_select_explicitly_and_invalid_v2_fixtures_have_one_cause(self):
-        v1_schema = load_json(V1_SCHEMA)
-        v2_schema = load_json(V2_SCHEMA)
-        v1_report = load_json(V1_FIXTURES / "valid/audit-report.json")
-        v2_report = load_json(V2_FIXTURES / "valid/audit-report.json")
-        self.assertEqual(stable_errors(v1_schema, v1_report), [])
-        self.assertEqual(stable_errors(v2_schema, v2_report), [])
-        self.assertTrue(stable_errors(v1_schema, v2_report))
-        self.assertTrue(stable_errors(v2_schema, v1_report))
-        unknown = {**v2_report, "schema_version": 99}
-        unknown_errors = stable_errors(v2_schema, unknown)
+    def test_v1_v2_v3_select_explicitly_and_v3_invalid_fixtures_are_exact(self):
+        schemas = [load_json(path) for path in (V1_SCHEMA, V2_SCHEMA, V3_SCHEMA)]
+        reports = [
+            load_json(path / "valid/audit-report.json")
+            for path in (V1_FIXTURES, V2_FIXTURES, V3_FIXTURES)
+        ]
+        for schema_index, schema in enumerate(schemas):
+            for report_index, report in enumerate(reports):
+                with self.subTest(schema=schema_index + 1, report=report_index + 1):
+                    errors = stable_errors(schema, report)
+                    self.assertEqual(errors == [], schema_index == report_index)
+        unknown = {**reports[2], "schema_version": 99}
+        unknown_errors = stable_errors(schemas[2], unknown)
         self.assertEqual(len(unknown_errors), 1)
         self.assertEqual(unknown_errors[0].validator, "const")
         cases = {
             "audit-report-legacy-result": "enum",
             "audit-report-unknown-property": "additionalProperties",
         }
-        paths = sorted((V2_FIXTURES / "invalid").glob("*.json"))
+        paths = sorted((V3_FIXTURES / "invalid").glob("*.json"))
         self.assertEqual([item.stem for item in paths], sorted(cases))
         for path in paths:
-            errors = stable_errors(v2_schema, load_json(path))
+            errors = stable_errors(schemas[2], load_json(path))
             with self.subTest(path=path.name):
                 self.assertEqual(len(errors), 1)
                 self.assertEqual(errors[0].validator, cases[path.stem])
+
+    def test_v3_rejects_reintroduced_clock_and_exception_semantics(self):
+        schema = load_json(V3_SCHEMA)
+        valid = load_json(V3_FIXTURES / "valid/audit-report.json")
+        mutations = {
+            "evaluation-instant": lambda value: value.update(
+                evaluation_instant="2026-08-09T00:00:00+00:00"
+            ),
+            "declared-exceptions": lambda value: value.update(declared_exceptions=[]),
+            "verified-with-exceptions": lambda value: value.update(
+                automated_result="verified_with_declared_exceptions"
+            ),
+            "excepted-summary": lambda value: value["automated_summary"].update(
+                excepted=0
+            ),
+            "excepted-control": lambda value: value["automated_controls"][0].update(
+                status="excepted"
+            ),
+            "exception-ids": lambda value: value["automated_controls"][0].update(
+                exception_ids=[]
+            ),
+        }
+        for name, mutation in mutations.items():
+            with self.subTest(case=name):
+                document = json.loads(json.dumps(valid))
+                mutation(document)
+                self.assertTrue(stable_errors(schema, document))
 
     @staticmethod
     def _nodes(value):
@@ -211,18 +251,22 @@ class AuditReportSchemaTests(unittest.TestCase):
 
 class ConstitutionalAuditTests(unittest.TestCase):
     def test_current_repository_is_verified_with_exact_governance_catalogs(self):
-        report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=ROOT)
+        report = audit_camilobuilder(repository_root=ROOT)
         self.assertEqual(report["automated_result"], "verified")
         self.assertEqual(report["constitution_version"], "2.0.0")
         self.assertEqual(report["architecture_version"], "1.3.0")
-        self.assertEqual(report["automated_summary"], {"passed": 14, "failed": 0, "excepted": 0, "indeterminate": 0})
+        self.assertEqual(report["schema_version"], 3)
+        self.assertEqual(report["report_version"], "3.0.0")
+        self.assertEqual(report["automated_summary"], {"passed": 14, "failed": 0, "indeterminate": 0})
         self.assertEqual({item[0] for item in CONTROLS}, EXPECTED_CONTROLS)
         self.assertEqual([item["id"] for item in report["automated_controls"]], sorted(EXPECTED_CONTROLS))
         self.assertEqual([item["id"] for item in report["manual_assertions"]], [item[0] for item in MANUAL_ASSERTIONS])
         self.assertTrue(all(item["declaration_status"] == "declared" and item["verification_scope"] == "presence_only" for item in report["manual_assertions"]))
         self.assertEqual([item["id"] for item in report["unverified_obligations"]], [item[0] for item in UNVERIFIED_OBLIGATIONS])
         self.assertEqual(report["findings"], [])
-        self.assertEqual(stable_errors(load_json(V2_SCHEMA), report), [])
+        self.assertEqual(stable_errors(load_json(V3_SCHEMA), report), [])
+        self.assertNotIn("evaluation_instant", report)
+        self.assertNotIn("declared_exceptions", report)
         self.assertIn("non-exhaustive", AST_ANALYSIS_SCOPE)
         control = next(
             item for item in report["automated_controls"]
@@ -240,7 +284,7 @@ class ConstitutionalAuditTests(unittest.TestCase):
                     path.unlink()
                 else:
                     path.write_text("**Versión constitucional:** invalid  \n", encoding="utf-8")
-                report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+                report = audit_camilobuilder(repository_root=root)
                 self.assertEqual(report["automated_result"], "indeterminate")
                 self.assertGreater(report["automated_summary"]["indeterminate"], 0)
 
@@ -257,7 +301,7 @@ class ConstitutionalAuditTests(unittest.TestCase):
                 "governance/work-orders/WORK-011.json",
                 lambda value: value.update(schema_version=3),
             )
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            report = audit_camilobuilder(repository_root=root)
             self.assertEqual(report["automated_result"], "failed")
             self.assertIn("unknown-schema-version", {item["code"] for item in report["findings"]})
 
@@ -268,11 +312,11 @@ class ConstitutionalAuditTests(unittest.TestCase):
             (root / "governance/schemas/v1/contract.schema.json").write_text(
                 "{", encoding="utf-8"
             )
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            report = audit_camilobuilder(repository_root=root)
             self.assertEqual(report["automated_result"], "verified")
 
         for relative in (
-            "governance/schemas/v2/audit-report.schema.json",
+            "governance/schemas/v3/audit-report.schema.json",
             "governance/schemas/v3/architecture.schema.json",
         ):
             with self.subTest(schema=relative), tempfile.TemporaryDirectory() as temporary:
@@ -284,23 +328,24 @@ class ConstitutionalAuditTests(unittest.TestCase):
                     lambda value: value.update({"$schema": "https://example.invalid/schema"}),
                 )
                 report = audit_camilobuilder(
-                    evaluation_instant=INSTANT, repository_root=root
+                    repository_root=root
                 )
                 self.assertEqual(report["automated_result"], "failed")
                 self.assertIn(
                     "unknown-schema-draft", {item["code"] for item in report["findings"]}
                 )
 
-    def test_requires_timezone_aware_explicit_instant(self):
-        with self.assertRaises(AuditInputError):
-            audit_camilobuilder(evaluation_instant=datetime(2026, 8, 7), repository_root=ROOT)
-        with self.assertRaises(AuditInputError):
-            audit_camilobuilder(evaluation_instant="2026-08-07T12:00:00Z", repository_root=ROOT)
+    def test_public_api_has_no_clock_input_or_legacy_input_error(self):
+        self.assertEqual(audit_camilobuilder.__kwdefaults__, {"repository_root": None})
+        self.assertEqual(audit_api.__dict__.get("AuditInputError"), None)
+        self.assertEqual(constitutional_audit.__all__, ("audit_camilobuilder",))
+        with self.assertRaises(TypeError):
+            audit_camilobuilder(evaluation_instant=object())
 
     def test_global_result_precedence_and_warning_behavior_are_exact(self):
         classify = audit_api._classify_result
         self.assertEqual(classify([{"status": "failed", "severity": "warning"}]), "verified")
-        self.assertEqual(classify([{"status": "excepted", "severity": "error"}]), "verified_with_declared_exceptions")
+        self.assertEqual(classify([{"status": "excepted", "severity": "error"}]), "indeterminate")
         self.assertEqual(classify([{"status": "indeterminate", "severity": "error"}]), "indeterminate")
         self.assertEqual(
             classify([
@@ -315,7 +360,7 @@ class ConstitutionalAuditTests(unittest.TestCase):
         imported = subprocess.run(command, cwd=ROOT, check=True, capture_output=True, text=True)
         self.assertIn("audit_camilobuilder", imported.stdout)
         with mock.patch("constitutional_audit.api.validate_with_schema", side_effect=ValidationUnavailable("missing")):
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=ROOT)
+            report = audit_camilobuilder(repository_root=ROOT)
         self.assertEqual(report["automated_result"], "indeterminate")
         self.assertGreater(report["automated_summary"]["indeterminate"], 0)
 
@@ -324,13 +369,13 @@ class ConstitutionalAuditTests(unittest.TestCase):
             root = Path(temporary)
             copy_repository(root)
             (root / "governance/architecture/registry.json").write_text("{", encoding="utf-8")
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            report = audit_camilobuilder(repository_root=root)
             self.assertEqual(report["automated_result"], "indeterminate")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             copy_repository(root)
             mutate_json(root, "governance/architecture/registry.json", lambda value: value.update(schema_version=99))
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            report = audit_camilobuilder(repository_root=root)
             self.assertEqual(report["automated_result"], "failed")
             self.assertIn("unknown-schema-version", {item["code"] for item in report["findings"]})
 
@@ -346,7 +391,7 @@ class ConstitutionalAuditTests(unittest.TestCase):
                 root = Path(temporary)
                 copy_repository(root)
                 mutate_json(root, "governance/architecture/registry.json", mutation)
-                report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+                report = audit_camilobuilder(repository_root=root)
                 self.assertEqual(report["automated_result"], "failed")
 
     def test_active_verification_reads_only_legacy_summary_fields(self):
@@ -360,7 +405,7 @@ class ConstitutionalAuditTests(unittest.TestCase):
             )
             self.assertEqual(
                 audit_camilobuilder(
-                    evaluation_instant=INSTANT, repository_root=root
+                    repository_root=root
                 )["automated_result"],
                 "verified",
             )
@@ -368,19 +413,19 @@ class ConstitutionalAuditTests(unittest.TestCase):
             root = Path(temporary)
             copy_repository(root)
             mutate_json(root, "governance/work-orders/WORK-009.json", lambda value: value["affected_contract_ids"].append("contract.unknown"))
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            report = audit_camilobuilder(repository_root=root)
             self.assertEqual(report["automated_result"], "verified")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             copy_repository(root)
             mutate_json(root, "governance/work-orders/WORK-011.json", lambda value: value.update(status="unknown"))
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            report = audit_camilobuilder(repository_root=root)
             self.assertEqual(report["automated_result"], "failed")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             copy_repository(root)
             mutate_json(root, "governance/work-orders/WORK-010.json", lambda value: value.update(dependencies=["WORK-999"]))
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            report = audit_camilobuilder(repository_root=root)
             self.assertEqual(report["automated_result"], "failed")
             self.assertIn("unknown-work-order-dependency", {item["code"] for item in report["findings"]})
 
@@ -393,9 +438,9 @@ class ConstitutionalAuditTests(unittest.TestCase):
                 builders["consumes_contract_ids"] = list(reversed(builders["consumes_contract_ids"]))
             mutate_json(root, "governance/architecture/registry.json", disorder)
             install_exception(root, covering=True)
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            report = audit_camilobuilder(repository_root=root)
             self.assertEqual(report["automated_result"], "failed")
-            self.assertEqual(report["declared_exceptions"], [])
+            self.assertNotIn("declared_exceptions", report)
             self.assertFalse(any(item["outcome"] == "excepted" for item in report["findings"]))
 
     def test_all_legacy_exception_states_are_ignored_by_active_verification(self):
@@ -421,9 +466,9 @@ class ConstitutionalAuditTests(unittest.TestCase):
                     )
                 else:
                     install_exception(root, status=case)
-                report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+                report = audit_camilobuilder(repository_root=root)
                 self.assertEqual(report["automated_result"], "verified")
-                self.assertEqual(report["declared_exceptions"], [])
+                self.assertNotIn("declared_exceptions", report)
                 self.assertFalse(
                     any(item["id"].startswith("control.exceptions.") for item in report["automated_controls"])
                 )
@@ -433,9 +478,9 @@ class ConstitutionalAuditTests(unittest.TestCase):
             root = Path(temporary)
             copy_repository(root)
             (root / "governance/exceptions/index.json").unlink()
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            report = audit_camilobuilder(repository_root=root)
             self.assertEqual(report["automated_result"], "verified")
-            self.assertEqual(report["declared_exceptions"], [])
+            self.assertNotIn("declared_exceptions", report)
 
     def test_active_verification_does_not_require_historical_git_objects(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -448,7 +493,7 @@ class ConstitutionalAuditTests(unittest.TestCase):
                 lambda value: value["evidence_refs"].__setitem__(0, "commit:" + "0" * 40),
             )
             with mock.patch("subprocess.run", side_effect=AssertionError("Git history lookup forbidden")):
-                report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+                report = audit_camilobuilder(repository_root=root)
             self.assertEqual(report["automated_result"], "verified")
             self.assertEqual(report["automated_summary"]["failed"], 0)
             self.assertEqual(report["automated_summary"]["indeterminate"], 0)
@@ -458,7 +503,7 @@ class ConstitutionalAuditTests(unittest.TestCase):
         inconsistent = json.loads(json.dumps(real))
         inconsistent["architecture_version"]["value"] = "9.0.0"
         with mock.patch.object(audit_api, "describe_camilobuilder", return_value=inconsistent):
-            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=ROOT)
+            report = audit_camilobuilder(repository_root=ROOT)
         self.assertEqual(report["automated_result"], "failed")
         self.assertIn("introspection-source-mismatch", {item["code"] for item in report["findings"]})
 
@@ -478,7 +523,7 @@ class ConstitutionalAuditTests(unittest.TestCase):
                     source.write_bytes(b"\xff\xfe")
                 else:
                     source.write_text("**Última confirmación:** 2026-08-08T17:46:16+02:00\n", encoding="utf-8")
-                report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+                report = audit_camilobuilder(repository_root=root)
                 self.assertEqual(report["automated_result"], "indeterminate")
                 self.assertTrue(all(item["declaration_status"] == "unavailable" for item in report["manual_assertions"]))
 
@@ -509,8 +554,8 @@ class ConstitutionalAuditTests(unittest.TestCase):
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr), \
              mock.patch.object(socket, "socket", side_effect=AssertionError("network forbidden")), \
              mock.patch("time.time", side_effect=AssertionError("clock forbidden")):
-            first = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=ROOT)
-            second = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=ROOT)
+            first = audit_camilobuilder(repository_root=ROOT)
+            second = audit_camilobuilder(repository_root=ROOT)
         self.assertEqual(first, second)
         self.assertEqual(first["automated_result"], "verified")
         self.assertEqual(

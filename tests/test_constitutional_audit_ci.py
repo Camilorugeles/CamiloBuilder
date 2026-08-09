@@ -11,13 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / ".github/workflows/constitutional-audit.yml"
 WORK_ORDER_PATH = ROOT / "governance/work-orders/WORK-009.json"
-MANUAL_INSTANT = "2026-08-07T17:45:00+00:00"
 PUBLISHED_POLICY_COMMIT = "a1e6e842cfdf653452c72a0de9ec7f14aa8aecdc"
 DIAGNOSTIC_FIELDS = {
     "automated_result",
     "automated_summary",
-    "declared_exceptions",
-    "evaluation_instant",
     "findings",
     "manual_assertions",
     "unverified_obligations",
@@ -43,7 +40,6 @@ def audit_adapter():
 
 def run_adapter(*, cwd=ROOT, pythonpath=None, case=None):
     environment = os.environ.copy()
-    environment["AUDIT_EVALUATION_INSTANT"] = MANUAL_INSTANT
     if pythonpath is not None:
         environment["PYTHONPATH"] = str(pythonpath)
     if case is not None:
@@ -102,13 +98,16 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
         )
         self.assertNotRegex(text, r"pip install (?!.*requirements-dev\.txt)")
 
-    def test_captures_the_runner_clock_once_as_rfc3339_utc_and_exports_it(self):
+    def test_has_no_clock_or_evaluation_instant_dependency(self):
         text = workflow_text()
-        capture = 'audit_evaluation_instant="$(date -u \'+%Y-%m-%dT%H:%M:%SZ\')"'
-        self.assertIn(capture, text)
-        self.assertEqual(text.count("date -u"), 1)
-        self.assertIn("AUDIT_EVALUATION_INSTANT=%s", text)
-        self.assertIn('>> "$GITHUB_ENV"', text)
+        self.assertNotIn("date -u", text)
+        self.assertNotIn("AUDIT_EVALUATION_INSTANT", text)
+        self.assertNotIn("evaluation_instant", text)
+        for legacy in (
+            "declared_exceptions", "verified_with_declared_exceptions",
+            "excepted", "exception_id",
+        ):
+            self.assertNotIn(legacy, text)
         self.assertNotIn("git show", text)
         self.assertNotIn("%cI", text)
         for path in (
@@ -133,7 +132,7 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
         self.assertNotIn("tests.test_constitutional_audit.AuditReportSchemaTests", text)
         self.assertIn("- name: Run governance verification", text)
         self.assertNotIn("- name: Run constitutional audit", text)
-        self.assertIn("audit_camilobuilder(evaluation_instant=instant)", text)
+        self.assertIn("report = audit_camilobuilder()", text)
 
     def test_checks_repository_state_once_at_the_end_without_repair(self):
         text = workflow_text()
@@ -158,13 +157,12 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, text)
 
-    def test_workflow_has_exactly_the_eight_active_operational_steps(self):
+    def test_workflow_has_exactly_the_seven_active_operational_steps(self):
         names = re.findall(r"(?m)^      - name: (.+)$", workflow_text())
         self.assertEqual(names, [
             "Checkout repository",
             "Set up Python",
             "Install development dependencies",
-            "Capture CI evaluation instant",
             "Run active test suite",
             "Compile Python sources",
             "Run governance verification",
@@ -181,13 +179,12 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         diagnostic = json.loads(lines[0])
         self.assertEqual(set(diagnostic), DIAGNOSTIC_FIELDS)
-        self.assertEqual(diagnostic["evaluation_instant"], MANUAL_INSTANT)
         self.assertEqual(diagnostic["automated_result"], "verified")
         self.assertTrue(diagnostic["manual_assertions"])
         self.assertTrue(diagnostic["unverified_obligations"])
         self.assertNotIn(str(ROOT), first.stdout)
 
-    def test_result_policy_fails_safe_and_conditions_exceptions(self):
+    def test_result_policy_fails_safe_without_legacy_exceptions(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             package = root / "constitutional_audit"
@@ -195,10 +192,6 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
             package.joinpath("__init__.py").write_text(self._fake_audit_module(), encoding="utf-8")
             expected = {
                 "verified": 0,
-                "verified_with_declared_exceptions": 0,
-                "exception_without_active_id": 1,
-                "exception_invalid_link": 1,
-                "exception_expired": 1,
                 "material_failure": 1,
                 "failed": 1,
                 "indeterminate": 1,
@@ -227,40 +220,25 @@ class ConstitutionalAuditWorkflowTests(unittest.TestCase):
     def _fake_audit_module():
         return '''import os
 
-class AuditInputError(ValueError):
-    pass
-
-def audit_camilobuilder(*, evaluation_instant, repository_root=None):
+def audit_camilobuilder(*, repository_root=None):
     case = os.environ["AUDIT_FAKE_CASE"]
-    result = case if case in {"verified", "verified_with_declared_exceptions", "failed", "indeterminate"} else "verified_with_declared_exceptions"
-    declared = [{"id": "EXCEPTION-001", "source_id": "governance/exceptions/EXCEPTION-001.json", "status": "active", "applied_finding_ids": ["finding.001"]}] if result == "verified_with_declared_exceptions" else []
+    result = case if case in {"verified", "failed", "indeterminate"} else "failed"
     status = "passed"
     findings = []
-    if result == "verified_with_declared_exceptions":
-        status = "excepted"
-        findings = [{"id": "finding.001", "outcome": "excepted", "severity": "error", "exception_id": "EXCEPTION-001", "code": "synthetic-exception"}]
-    elif result == "failed":
+    if result == "failed":
         status = "failed"
-        findings = [{"id": "finding.001", "outcome": "failed", "severity": "error", "exception_id": None, "code": "synthetic-failure"}]
+        findings = [{"id": "finding.001", "outcome": "failed", "severity": "error", "code": "synthetic-failure"}]
     elif result == "indeterminate":
         status = "indeterminate"
-        findings = [{"id": "finding.001", "outcome": "indeterminate", "severity": "error", "exception_id": None, "code": "synthetic-indeterminate"}]
-    if case == "exception_without_active_id":
-        declared = []
-    if case == "exception_invalid_link":
-        findings[0]["exception_id"] = "EXCEPTION-999"
-    if case == "exception_expired":
-        findings[0]["code"] = "expired-exception"
+        findings = [{"id": "finding.001", "outcome": "indeterminate", "severity": "error", "code": "synthetic-indeterminate"}]
     if case == "material_failure":
-        findings.append({"id": "finding.002", "outcome": "failed", "severity": "critical", "exception_id": None, "code": "synthetic-failure"})
-    summary = {"passed": status == "passed", "failed": status == "failed", "excepted": status == "excepted", "indeterminate": status == "indeterminate"}
+        findings.append({"id": "finding.002", "outcome": "failed", "severity": "critical", "code": "synthetic-failure"})
+    summary = {"passed": status == "passed", "failed": status == "failed", "indeterminate": status == "indeterminate"}
     if case == "contradictory_summary":
         summary["passed"] = 99
     return {
-        "evaluation_instant": evaluation_instant.isoformat(),
         "automated_result": result,
         "automated_summary": summary,
-        "declared_exceptions": declared,
         "findings": findings,
         "automated_controls": [{"status": status, "severity": "error"}],
         "manual_assertions": [{"id": "assertion.synthetic", "verification_scope": "presence_only"}],
