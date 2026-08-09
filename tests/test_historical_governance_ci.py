@@ -58,6 +58,13 @@ class HistoricalGovernanceWorkflowTests(unittest.TestCase):
         self.assertNotIn("tests/historical", active)
         self.assertNotIn("historical_*.py", active)
 
+    def test_legacy_schema_and_exception_coverage_remains_manual_and_explicit(self):
+        historical_modules = {
+            path.name for path in HISTORICAL_DIR.glob("historical_*.py")
+        }
+        self.assertIn("historical_governance_schemas.py", historical_modules)
+        self.assertIn("historical_exceptions.py", historical_modules)
+
 
 if __name__ == "__main__":
     unittest.main()

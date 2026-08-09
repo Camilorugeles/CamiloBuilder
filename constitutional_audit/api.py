@@ -17,11 +17,9 @@ from constitutional_audit.controls import (
 )
 from constitutional_audit.validation import (
     AST_ANALYSIS_SCOPE,
-    EXCEPTION_TRANSITIONS,
     SourceError,
     ValidationUnavailable,
     architecture_issues,
-    history_issues,
     load_json,
     local_schema_reference_issues,
     safe_path,
@@ -31,18 +29,10 @@ from constitutional_audit.validation import (
 
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[1]
-CRITICAL_PROVISIONS = {
-    "principle.failure-safe",
-    "principle.least-privilege",
-    "principle.non-destruction",
-    "principle.safe-failure-minimum-access",
-}
-NON_EXCUSABLE_CODES = {
-    "constitution-version-unknown",
-    "exception-registry-invalid",
-    "exception-schema-invalid",
-    "exception-validation-unavailable",
-}
+ACTIVE_SCHEMA_PATHS = (
+    "governance/schemas/v2/audit-report.schema.json",
+    "governance/schemas/v3/architecture.schema.json",
+)
 CONTROL_SOURCES = {
     "control.architecture.contracts": ["governance/architecture/registry.json"],
     "control.architecture.dependencies": ["governance/architecture/registry.json"],
@@ -51,8 +41,6 @@ CONTROL_SOURCES = {
     "control.architecture.registry-schema": ["governance/architecture/registry.json", "governance/schemas/v3/architecture.schema.json"],
     "control.architecture.runtime-coherence": ["governance/architecture/registry.json", "repository static Python imports"],
     "control.constitution.version": ["governance/CONSTITUTION.md"],
-    "control.exceptions.integrity": ["active governance model"],
-    "control.exceptions.temporal-validity": ["active governance model"],
     "control.governance.manual-assertion-sources": ["governance/MAINTAINERS.md"],
     "control.introspection.coherence": ["capability_introspection.describe_camilobuilder"],
     "control.references.integrity": ["governance/architecture/registry.json", "governance/work-orders/"],
@@ -90,12 +78,10 @@ def _schema_path(record_type, version):
     names = {
         "architecture": "architecture.schema.json",
         "work-order": "work-order.schema.json",
-        "exception": "exception.schema.json",
     }
     supported = {
         "architecture": {1, 2, 3},
         "work-order": {1, 2},
-        "exception": {1, 2},
     }
     if record_type not in supported or version not in supported[record_type]:
         raise SourceError("unknown-schema-version")
@@ -107,57 +93,6 @@ def _validate_record(root, record_type, document):
     schema_relative = _schema_path(record_type, version)
     schema = load_json(root, schema_relative, dict)
     return validate_with_schema(document, schema)
-
-
-def _exception_semantic_issues(document, instant, known_contracts, known_work_orders):
-    issues = history_issues(document, EXCEPTION_TRANSITIONS)
-    try:
-        starts_at = datetime.fromisoformat(document["starts_at"])
-        expires_at = datetime.fromisoformat(document["expires_at"])
-    except (KeyError, TypeError, ValueError):
-        return sorted(set(issues + ["invalid-exception-date"]))
-    if starts_at >= expires_at:
-        issues.append("invalid-exception-date-order")
-    if document.get("status") == "active" and instant < starts_at:
-        issues.append("active-exception-not-started")
-    if document.get("status") == "active" and instant >= expires_at:
-        issues.append("active-exception-expired")
-    if document.get("status") == "expired":
-        issues.append("expired-exception")
-    if set(document.get("affected_contract_ids", [])) - known_contracts:
-        issues.append("unknown-exception-contract")
-    if document.get("remediation_work_order_id") not in known_work_orders:
-        issues.append("unknown-remediation-work-order")
-    if document.get("affected_capability_ids"):
-        issues.append("unknown-exception-capability")
-    return sorted(set(issues))
-
-
-def _exception_covers(exception, finding, instant):
-    if finding["outcome"] != "failed" or finding["code"] in NON_EXCUSABLE_CODES:
-        return False
-    if exception.get("status") != "active":
-        return False
-    try:
-        starts = datetime.fromisoformat(exception["starts_at"])
-        expires = datetime.fromisoformat(exception["expires_at"])
-    except (KeyError, TypeError, ValueError):
-        return False
-    if not starts <= instant < expires:
-        return False
-    if exception.get("constitutional_provision") != finding["constitutional_provision"]:
-        return False
-    subjects = set(exception.get("affected_component_ids", []))
-    subjects.update(exception.get("affected_contract_ids", []))
-    subjects.update(exception.get("affected_capability_ids", []))
-    if not set(finding["subject_ids"]).issubset(subjects):
-        return False
-    if not finding["subject_ids"]:
-        return False
-    if exception.get("constitutional_provision") in CRITICAL_PROVISIONS:
-        if exception.get("approval_policy") != "critical" or len(exception.get("approval_ids", [])) < 2:
-            return False
-    return True
 
 
 def _classify_result(controls):
@@ -284,14 +219,9 @@ def _perform_audit(root, instant):
     except ConstitutionSourceError:
         _add(findings, "control.constitution.version", "indeterminate", "constitution-unavailable", "governance/CONSTITUTION.md", "constitution.camilobuilder")
 
-    schema_files = []
     try:
-        schemas_root = safe_path(root, "governance/schemas", file=False)
-        if any(path.is_symlink() for path in schemas_root.rglob("*")):
-            raise SourceError("symlink-schema-source")
-        schema_files = sorted(path for path in schemas_root.rglob("*.json") if path.is_file())
-        for path in schema_files:
-            relative = path.relative_to(root).as_posix()
+        for relative in ACTIVE_SCHEMA_PATHS:
+            path = safe_path(root, relative)
             schema = load_json(root, relative, dict)
             if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
                 _add(findings, "control.schemas.selection", "failed", "unknown-schema-draft", relative, "governance.schemas")

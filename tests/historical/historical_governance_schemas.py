@@ -14,7 +14,7 @@ except ModuleNotFoundError as error:
     ) from error
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_DIR = ROOT / "governance" / "schemas" / "v1"
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "governance" / "v1"
 SCHEMA_NAMES = (

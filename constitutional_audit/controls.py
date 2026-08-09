@@ -6,8 +6,6 @@ CONTROLS = (
     ("control.architecture.registry-schema", "Architecture registry schema", "critical", "principle.traceability"),
     ("control.architecture.runtime-coherence", "Limited static import dependency coherence", "error", "principle.traceability"),
     ("control.constitution.version", "Canonical Constitution version source", "critical", "principle.traceability"),
-    ("control.exceptions.integrity", "Legacy exception registry integrity", "critical", "principle.incremental-evolution"),
-    ("control.exceptions.temporal-validity", "Legacy exception temporal validity", "error", "principle.safe-failure-minimum-access"),
     ("control.governance.manual-assertion-sources", "Maintainer declaration source availability", "error", "principle.traceability"),
     ("control.introspection.coherence", "Capability introspection coherence", "error", "principle.no-drift-self-knowledge"),
     ("control.references.integrity", "Governed reference integrity", "error", "principle.traceability"),

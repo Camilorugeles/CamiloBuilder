@@ -46,8 +46,6 @@ EXPECTED_CONTROLS = {
     "control.architecture.contracts",
     "control.architecture.no-derived-inventories",
     "control.work-orders.integrity",
-    "control.exceptions.integrity",
-    "control.exceptions.temporal-validity",
     "control.governance.manual-assertion-sources",
     "control.references.integrity",
     "control.introspection.coherence",
@@ -217,7 +215,7 @@ class ConstitutionalAuditTests(unittest.TestCase):
         self.assertEqual(report["automated_result"], "verified")
         self.assertEqual(report["constitution_version"], "2.0.0")
         self.assertEqual(report["architecture_version"], "1.3.0")
-        self.assertEqual(report["automated_summary"], {"passed": 16, "failed": 0, "excepted": 0, "indeterminate": 0})
+        self.assertEqual(report["automated_summary"], {"passed": 14, "failed": 0, "excepted": 0, "indeterminate": 0})
         self.assertEqual({item[0] for item in CONTROLS}, EXPECTED_CONTROLS)
         self.assertEqual([item["id"] for item in report["automated_controls"]], sorted(EXPECTED_CONTROLS))
         self.assertEqual([item["id"] for item in report["manual_assertions"]], [item[0] for item in MANUAL_ASSERTIONS])
@@ -262,6 +260,36 @@ class ConstitutionalAuditTests(unittest.TestCase):
             report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
             self.assertEqual(report["automated_result"], "failed")
             self.assertIn("unknown-schema-version", {item["code"] for item in report["findings"]})
+
+    def test_active_schema_catalog_excludes_legacy_but_protects_active_contracts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            copy_repository(root)
+            (root / "governance/schemas/v1/contract.schema.json").write_text(
+                "{", encoding="utf-8"
+            )
+            report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
+            self.assertEqual(report["automated_result"], "verified")
+
+        for relative in (
+            "governance/schemas/v2/audit-report.schema.json",
+            "governance/schemas/v3/architecture.schema.json",
+        ):
+            with self.subTest(schema=relative), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                copy_repository(root)
+                mutate_json(
+                    root,
+                    relative,
+                    lambda value: value.update({"$schema": "https://example.invalid/schema"}),
+                )
+                report = audit_camilobuilder(
+                    evaluation_instant=INSTANT, repository_root=root
+                )
+                self.assertEqual(report["automated_result"], "failed")
+                self.assertIn(
+                    "unknown-schema-draft", {item["code"] for item in report["findings"]}
+                )
 
     def test_requires_timezone_aware_explicit_instant(self):
         with self.assertRaises(AuditInputError):
@@ -396,11 +424,9 @@ class ConstitutionalAuditTests(unittest.TestCase):
                 report = audit_camilobuilder(evaluation_instant=INSTANT, repository_root=root)
                 self.assertEqual(report["automated_result"], "verified")
                 self.assertEqual(report["declared_exceptions"], [])
-                statuses = {
-                    item["id"]: item["status"] for item in report["automated_controls"]
-                }
-                self.assertEqual(statuses["control.exceptions.integrity"], "passed")
-                self.assertEqual(statuses["control.exceptions.temporal-validity"], "passed")
+                self.assertFalse(
+                    any(item["id"].startswith("control.exceptions.") for item in report["automated_controls"])
+                )
 
     def test_active_verification_does_not_require_the_legacy_exception_index(self):
         with tempfile.TemporaryDirectory() as temporary:

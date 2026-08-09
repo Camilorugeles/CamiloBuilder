@@ -14,7 +14,7 @@ except ModuleNotFoundError as error:
     ) from error
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 V1_SCHEMA_PATH = ROOT / "governance" / "schemas" / "v1" / "exception.schema.json"
 V2_SCHEMA_PATH = ROOT / "governance" / "schemas" / "v2" / "exception.schema.json"
 V1_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "governance" / "v1" / "valid" / "exception.json"
