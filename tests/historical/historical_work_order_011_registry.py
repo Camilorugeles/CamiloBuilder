@@ -17,7 +17,7 @@ from constitutional_audit import audit_camilobuilder
 from capability_introspection.work_orders import discover_work_orders
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 WORK_ORDER_PATH = ROOT / "governance/work-orders/WORK-011.json"
 SCHEMA_PATH = ROOT / "governance/schemas/v2/work-order.schema.json"
 WORK_009_PATH = ROOT / "governance/work-orders/WORK-009.json"

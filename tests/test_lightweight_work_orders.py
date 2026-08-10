@@ -21,8 +21,6 @@ from tests.helpers.historical_governance import (
 ROOT = Path(__file__).resolve().parents[1]
 WORK_ORDERS = ROOT / "governance/work-orders"
 WORK_009_SHA256 = "50edc69a50bcfd6179e68cd4a8fe0021c5e8cfcbd929b725e5f24d3d4c27ac9a"
-V1_SCHEMA_SHA256 = "6e3102a7cd53b7db1d421889015aa2f978e114256edeefbb25500fec8381281d"
-V2_SCHEMA_SHA256 = "3787ea3b82e11ce19fba6dea453f61a1602b28028bcd42296b51f334f474f3d6"
 FUNCTIONAL_COMMIT = "4a594899bc7c3fdd06f24eed388d06d341656a71"
 
 
@@ -174,6 +172,18 @@ class LightweightWorkOrderTests(unittest.TestCase):
         with temporary, self.assertRaises(WorkOrderSourceError):
             discover_work_orders(root)
 
+        for name, mutation in {
+            "legacy-filename-id-mismatch": lambda value: value.update(id="WORK-999"),
+            "legacy-empty-title": lambda value: value.update(title=""),
+            "legacy-unknown-status": lambda value: value.update(status="unknown"),
+        }.items():
+            with self.subTest(case=name):
+                temporary, root = self._mutated_root(
+                    mutation, filename="WORK-011.json"
+                )
+                with temporary, self.assertRaises(WorkOrderSourceError):
+                    discover_work_orders(root)
+
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self._copy_governance(root)
@@ -219,14 +229,6 @@ class LightweightWorkOrderTests(unittest.TestCase):
 
     def test_legacy_artifacts_remain_intact(self):
         self.assertEqual(hashlib.sha256((WORK_ORDERS / "WORK-009.json").read_bytes()).hexdigest(), WORK_009_SHA256)
-        self.assertEqual(
-            hashlib.sha256((ROOT / "governance/schemas/v1/work-order.schema.json").read_bytes()).hexdigest(),
-            V1_SCHEMA_SHA256,
-        )
-        self.assertEqual(
-            hashlib.sha256((ROOT / "governance/schemas/v2/work-order.schema.json").read_bytes()).hexdigest(),
-            V2_SCHEMA_SHA256,
-        )
         self.assertFalse((ROOT / "governance/schemas/v3/work-order.schema.json").exists())
 
 

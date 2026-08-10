@@ -23,6 +23,7 @@ except ModuleNotFoundError as error:
 import constitutional_audit.api as audit_api
 import constitutional_audit
 from constitutional_audit import audit_camilobuilder
+from capability_introspection import describe_camilobuilder
 from constitutional_audit.controls import CONTROLS, MANUAL_ASSERTIONS, UNVERIFIED_OBLIGATIONS
 from constitutional_audit.validation import AST_ANALYSIS_SCOPE, ValidationUnavailable
 
@@ -334,6 +335,42 @@ class ConstitutionalAuditTests(unittest.TestCase):
                 self.assertIn(
                     "unknown-schema-draft", {item["code"] for item in report["findings"]}
                 )
+
+    def test_active_work_order_readability_does_not_require_legacy_schemas(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            copy_repository(root)
+            for version in ("v1", "v2"):
+                (root / f"governance/schemas/{version}/work-order.schema.json").unlink(
+                    missing_ok=True
+                )
+
+            description = describe_camilobuilder(repository_root=root)
+            report = audit_camilobuilder(repository_root=root)
+
+            self.assertEqual(
+                [
+                    (item["id"], item["status"])
+                    for item in description["work_orders"]["items"]
+                ],
+                [
+                    ("WORK-009", "published"),
+                    ("WORK-010", "done"),
+                    ("WORK-011", "cancelled"),
+                ],
+            )
+            self.assertEqual(report["automated_result"], "verified")
+            self.assertEqual(report["automated_summary"]["failed"], 0)
+            self.assertEqual(report["automated_summary"]["indeterminate"], 0)
+            work_order_control = next(
+                item
+                for item in report["automated_controls"]
+                if item["id"] == "control.work-orders.integrity"
+            )
+            self.assertEqual(work_order_control["status"], "passed")
+            self.assertEqual(
+                work_order_control["source_ids"], ["governance/work-orders/"]
+            )
 
     def test_public_api_has_no_clock_input_or_legacy_input_error(self):
         self.assertEqual(audit_camilobuilder.__kwdefaults__, {"repository_root": None})

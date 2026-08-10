@@ -7,7 +7,7 @@ from tests.helpers.historical_governance import (
     require_commit,
 )
 from tests.test_lightweight_work_orders import FUNCTIONAL_COMMIT
-from tests.test_work_order_registry import IMPLEMENTATION_COMMITS, WORK_ORDER_PATH, load_json
+from historical_work_order_registry import IMPLEMENTATION_COMMITS, WORK_ORDER_PATH, load_json
 
 
 ROOT = WORK_ORDER_PATH.parents[2]

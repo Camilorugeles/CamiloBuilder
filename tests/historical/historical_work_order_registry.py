@@ -13,7 +13,7 @@ except ModuleNotFoundError as error:
         "python3 -m pip install -r requirements-dev.txt"
     ) from error
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 V1_SCHEMA_PATH = ROOT / "governance" / "schemas" / "v1" / "work-order.schema.json"
 V2_SCHEMA_PATH = ROOT / "governance" / "schemas" / "v2" / "work-order.schema.json"
 V1_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "governance" / "v1" / "valid" / "work-order.json"
@@ -130,6 +130,10 @@ class WorkOrderRegistryTests(unittest.TestCase):
         self.assertEqual(digest, V1_SCHEMA_SHA256)
         fixture = load_json(V1_FIXTURE_PATH)
         self.assertEqual(stable_schema_errors(make_validator(self.v1_schema), fixture), [])
+
+    def test_historical_work_order_schemas_are_required_audit_sources(self):
+        self.assertTrue(V1_SCHEMA_PATH.is_file())
+        self.assertTrue(V2_SCHEMA_PATH.is_file())
 
     def test_schema_selection_is_explicit_for_v1_and_v2(self):
         v1_fixture = load_json(V1_FIXTURE_PATH)

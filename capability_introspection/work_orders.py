@@ -145,13 +145,6 @@ def discover_work_orders(repository_root: Path) -> list[dict[str, object]]:
                     code="unknown-schema-version",
                 )
             version = document["schema_version"]
-            schema_path = root / "governance" / "schemas" / f"v{version}" / "work-order.schema.json"
-            if schema_path.is_symlink() or not schema_path.is_file():
-                raise WorkOrderSourceError("Unavailable legacy Work Order schema")
-            try:
-                schema_path.resolve().relative_to(root.resolve())
-            except ValueError as error:
-                raise WorkOrderSourceError("Escaped legacy Work Order schema") from error
             if document.get("status") not in LEGACY_STATUSES[version]:
                 raise WorkOrderSourceError("Invalid legacy Work Order status")
             model = "legacy"
