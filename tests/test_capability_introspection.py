@@ -24,11 +24,8 @@ from builders.project_builder import ProjectBuilder
 
 
 ROOT = Path(__file__).resolve().parents[1]
-V1_SCHEMA = ROOT / "governance" / "schemas" / "v1" / "capability.schema.json"
 V2_SCHEMA = ROOT / "governance" / "schemas" / "v2" / "capability.schema.json"
-V1_FIXTURE = ROOT / "tests" / "fixtures" / "governance" / "v1" / "valid" / "capability.json"
 V2_FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "governance" / "v2"
-V1_SCHEMA_SHA256 = "eaa76909cf19cae595d094aed1f736e559b409c757bf3d06a2ff83d4fe31d963"
 
 
 def load_json(path):
@@ -57,14 +54,6 @@ def stable_errors(schema_validator, instance):
     )
 
 
-def select_capability_schema(document):
-    paths = {1: V1_SCHEMA, 2: V2_SCHEMA}
-    version = document.get("schema_version")
-    if version not in paths:
-        raise ValueError(f"Unsupported capability schema_version: {version!r}")
-    return load_json(paths[version])
-
-
 def tree_digest(path):
     digest = hashlib.sha256()
     for item in sorted(candidate for candidate in path.rglob("*") if candidate.is_file()):
@@ -76,19 +65,8 @@ def tree_digest(path):
 class CapabilityIntrospectionSchemaTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.v1_schema = load_json(V1_SCHEMA)
         cls.v2_schema = load_json(V2_SCHEMA)
         cls.valid_v2 = load_json(V2_FIXTURE_ROOT / "valid" / "capability.json")
-
-    def test_capability_v1_is_byte_for_byte_intact_and_still_validates(self):
-        self.assertEqual(hashlib.sha256(V1_SCHEMA.read_bytes()).hexdigest(), V1_SCHEMA_SHA256)
-        self.assertEqual(stable_errors(validator(self.v1_schema), load_json(V1_FIXTURE)), [])
-
-    def test_schema_selection_is_explicit_without_fallback(self):
-        self.assertEqual(select_capability_schema(load_json(V1_FIXTURE))["properties"]["schema_version"], {"const": 1})
-        self.assertEqual(select_capability_schema(self.valid_v2)["properties"]["schema_version"], {"const": 2})
-        with self.assertRaisesRegex(ValueError, "Unsupported capability schema_version"):
-            select_capability_schema({"schema_version": 3})
 
     def test_v2_is_closed_draft_2020_12_and_validates_locally(self):
         self.assertEqual(self.v2_schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
@@ -250,7 +228,6 @@ class CapabilityIntrospectionTests(unittest.TestCase):
             root = Path(temporary)
             shutil.copytree(ROOT / "governance", root / "governance")
             shutil.copytree(ROOT / "templates", root / "templates")
-            (root / "governance/exceptions/index.json").unlink()
             report = describe_camilobuilder(repository_root=root)
             self.assertEqual(report["active_exceptions"], {
                 "classification": "normative_declared",

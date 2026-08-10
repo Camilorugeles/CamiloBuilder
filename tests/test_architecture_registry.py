@@ -16,15 +16,9 @@ except ModuleNotFoundError as error:
 
 
 ROOT = Path(__file__).resolve().parents[1]
-V1_SCHEMA_PATH = ROOT / "governance" / "schemas" / "v1" / "architecture.schema.json"
-V2_SCHEMA_PATH = ROOT / "governance" / "schemas" / "v2" / "architecture.schema.json"
 V3_SCHEMA_PATH = ROOT / "governance" / "schemas" / "v3" / "architecture.schema.json"
 REGISTRY_PATH = ROOT / "governance" / "architecture" / "registry.json"
-V1_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "governance" / "v1" / "valid" / "architecture.json"
-V2_FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "governance" / "v2"
 V3_FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "governance" / "v3"
-V1_SCHEMA_SHA256 = "a89ef3fe0d00687d4ee8ea72e154a2ddab5a8b5e1fd783c600ca22c101253d89"
-V2_SCHEMA_SHA256 = "acf901da3100f284936da9fe6deae148d1a641141cc93a91b9599e4de8ade3a9"
 DERIVED_INVENTORY_FIELDS = {
     "builders",
     "capabilities",
@@ -63,14 +57,6 @@ def stable_schema_errors(validator, instance):
             error.message,
         ),
     )
-
-
-def select_architecture_schema(instance):
-    version = instance.get("schema_version")
-    paths = {1: V1_SCHEMA_PATH, 2: V2_SCHEMA_PATH, 3: V3_SCHEMA_PATH}
-    if version not in paths:
-        raise ValueError(f"Unsupported architecture schema_version: {version!r}")
-    return load_json(paths[version])
 
 
 def tree_digest(paths):
@@ -198,64 +184,28 @@ def internal_static_dependencies(document):
 class ArchitectureRegistryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.v1_schema = load_json(V1_SCHEMA_PATH)
-        cls.v2_schema = load_json(V2_SCHEMA_PATH)
         cls.v3_schema = load_json(V3_SCHEMA_PATH)
         cls.registry = load_json(REGISTRY_PATH)
-        cls.valid_v2_fixture = load_json(V2_FIXTURE_ROOT / "valid" / "architecture.json")
         cls.valid_fixture = load_json(V3_FIXTURE_ROOT / "valid" / "architecture.json")
 
-    def test_v1_schema_is_byte_for_byte_unchanged_and_still_validates(self):
-        digest = hashlib.sha256(V1_SCHEMA_PATH.read_bytes()).hexdigest()
-        self.assertEqual(digest, V1_SCHEMA_SHA256)
-        fixture = load_json(V1_FIXTURE_PATH)
-        self.assertEqual(stable_schema_errors(make_validator(self.v1_schema), fixture), [])
-
-    def test_schema_selection_is_explicit_and_rejects_unknown_versions(self):
-        v1_fixture = load_json(V1_FIXTURE_PATH)
-        self.assertEqual(select_architecture_schema(v1_fixture)["properties"]["schema_version"], {"const": 1})
-        self.assertEqual(select_architecture_schema(self.valid_v2_fixture)["properties"]["schema_version"], {"const": 2})
-        self.assertEqual(select_architecture_schema(self.valid_fixture)["properties"]["schema_version"], {"const": 3})
-        with self.assertRaisesRegex(ValueError, "Unsupported architecture schema_version"):
-            select_architecture_schema({"schema_version": 4})
-
-    def test_v2_schema_is_draft_2020_12_closed_and_network_independent(self):
-        self.assertEqual(self.v2_schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
-        self.assertEqual(self.v2_schema["properties"]["schema_version"], {"const": 2})
-        Draft202012Validator.check_schema(self.v2_schema)
-        object_nodes = [
-            node
-            for node in self._nodes(self.v2_schema)
-            if isinstance(node, dict) and node.get("type") == "object"
-        ]
-        self.assertTrue(all(node.get("additionalProperties") is False for node in object_nodes))
-        refs = [node["$ref"] for node in self._nodes(self.v2_schema) if isinstance(node, dict) and "$ref" in node]
-        self.assertTrue(refs)
-        self.assertTrue(all(ref.startswith("#/$defs/") for ref in refs))
-        self.assertEqual(hashlib.sha256(V2_SCHEMA_PATH.read_bytes()).hexdigest(), V2_SCHEMA_SHA256)
-        self.assertEqual(stable_schema_errors(make_validator(self.v2_schema), self.valid_v2_fixture), [])
-
-    def test_v3_differs_from_v2_only_by_version_metadata_and_constitution_field(self):
+    def test_v3_is_the_active_closed_local_architecture_contract(self):
+        self.assertEqual(self.v3_schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
         self.assertEqual(self.v3_schema["properties"]["schema_version"], {"const": 3})
         self.assertNotIn("constitution_version", self.v3_schema["properties"])
         self.assertNotIn("constitution_version", self.v3_schema["required"])
-        normalized_v2 = copy.deepcopy(self.v2_schema)
-        normalized_v3 = copy.deepcopy(self.v3_schema)
-        for schema in (normalized_v2, normalized_v3):
-            schema.pop("$id")
-            schema.pop("title")
-            schema["properties"]["schema_version"] = {"const": "normalized"}
-        normalized_v2["required"].remove("constitution_version")
-        normalized_v2["properties"].pop("constitution_version")
-        self.assertEqual(normalized_v2, normalized_v3)
         Draft202012Validator.check_schema(self.v3_schema)
+        object_nodes = [
+            node for node in self._nodes(self.v3_schema)
+            if isinstance(node, dict) and node.get("type") == "object"
+        ]
+        self.assertTrue(all(node.get("additionalProperties") is False for node in object_nodes))
         self.assertEqual(stable_schema_errors(make_validator(self.v3_schema), self.registry), [])
         invalid = load_json(V3_FIXTURE_ROOT / "invalid/architecture-constitution-version.json")
         errors = stable_schema_errors(make_validator(self.v3_schema), invalid)
         self.assertTrue(any(error.validator == "additionalProperties" for error in errors))
 
     def test_registry_validates_without_writes(self):
-        guarded_paths = [ROOT / "governance", V2_FIXTURE_ROOT, V3_FIXTURE_ROOT]
+        guarded_paths = [ROOT / "governance", V3_FIXTURE_ROOT]
         before = tree_digest(guarded_paths)
         first = stable_schema_errors(make_validator(self.v3_schema), self.registry)
         second = stable_schema_errors(make_validator(self.v3_schema), self.registry)
@@ -402,33 +352,6 @@ class ArchitectureRegistryTests(unittest.TestCase):
                 allowed = set(modules[module_id]["allowed_dependency_ids"])
                 self.assertEqual(dependencies & prohibited, set())
                 self.assertLessEqual(dependencies, allowed)
-
-    def test_each_invalid_v2_fixture_fails_for_one_specific_reason(self):
-        cases = {
-            "architecture-duplicate-path": ("cross", "duplicate-path"),
-            "architecture-invalid-contract-reference": ("cross", "unknown-contract"),
-            "architecture-invalid-dependency": ("cross", "unknown-dependency"),
-            "architecture-invalid-path-escape": ("schema", "pattern"),
-            "architecture-invalid-schema-version": ("schema", "const"),
-            "architecture-unknown-property": ("schema", "additionalProperties"),
-        }
-        invalid_dir = V2_FIXTURE_ROOT / "invalid"
-        self.assertEqual(
-            sorted(path.stem for path in invalid_dir.glob("architecture-*.json")),
-            sorted(cases),
-        )
-        for name, (validation_type, expected) in cases.items():
-            fixture = load_json(invalid_dir / f"{name}.json")
-            schema_errors = stable_schema_errors(make_validator(self.v2_schema), fixture)
-            cross_issues = cross_validation_issues(fixture)
-            with self.subTest(fixture=name):
-                if validation_type == "schema":
-                    self.assertEqual(len(schema_errors), 1)
-                    self.assertEqual(schema_errors[0].validator, expected)
-                else:
-                    self.assertEqual(schema_errors, [])
-                    self.assertEqual(len(cross_issues), 1)
-                    self.assertEqual(cross_issues[0][0], expected)
 
     @staticmethod
     def _nodes(value):

@@ -29,14 +29,8 @@ from constitutional_audit.validation import AST_ANALYSIS_SCOPE, ValidationUnavai
 
 
 ROOT = Path(__file__).resolve().parents[1]
-V1_SCHEMA = ROOT / "governance/schemas/v1/audit-report.schema.json"
-V2_SCHEMA = ROOT / "governance/schemas/v2/audit-report.schema.json"
 V3_SCHEMA = ROOT / "governance/schemas/v3/audit-report.schema.json"
-V1_FIXTURES = ROOT / "tests/fixtures/governance/audit/v1"
-V2_FIXTURES = ROOT / "tests/fixtures/governance/audit/v2"
 V3_FIXTURES = ROOT / "tests/fixtures/governance/audit/v3"
-V1_SCHEMA_SHA256 = "3f54aed74a6f6a6f0943a48a82af12674b71d8b0a68f011c0dab88def0f4b727"
-V2_SCHEMA_SHA256 = "e2fec5b627c6830bc659cac4457dfa76a69cb57c8f3998fa9f3db50191da2cd6"
 EXPECTED_CONTROLS = {
     "control.constitution.version",
     "control.schemas.selection",
@@ -112,61 +106,8 @@ def mutate_json(root, relative, mutator):
     write_json(path, document)
 
 
-def install_exception(root, status="active", *, covering=False, critical_incomplete=False):
-    source_name = "exception-closed.json" if status in {"closed", "revoked"} else "exception-active.json"
-    document = load_json(ROOT / "tests/fixtures/governance/v2/valid" / source_name)
-    document["id"] = "EXCEPTION-001"
-    document["starts_at"] = "2026-08-01T00:00:00+00:00"
-    document["expires_at"] = "2026-09-01T00:00:00+00:00"
-    if covering:
-        document["constitutional_provision"] = "principle.traceability"
-        document["approval_policy"] = "ordinary"
-        document["affected_component_ids"] = ["module.builders"]
-        document["affected_contract_ids"] = []
-    if status == "active":
-        document["status"] = "active"
-        document["conformance_status"] = "temporarily_authorized"
-        document["status_history"] = [{
-            "from": "proposed", "to": "active", "at": "2026-08-01T01:00:00+00:00"
-        }]
-        document.pop("closure", None)
-    elif status == "expired":
-        document["status"] = "expired"
-        document["conformance_status"] = "nonconforming"
-        document["expires_at"] = "2026-08-06T00:00:00+00:00"
-        document["status_history"] = [
-            {"from": "proposed", "to": "active", "at": "2026-08-01T01:00:00+00:00"},
-            {"from": "active", "to": "expired", "at": "2026-08-06T00:00:00+00:00"},
-        ]
-        document.pop("closure", None)
-    else:
-        document["status"] = status
-        document["conformance_status"] = "resolved" if status == "closed" else "nonconforming"
-        document["status_history"] = [
-            {"from": "proposed", "to": "active", "at": "2026-08-01T01:00:00+00:00"},
-            {"from": "active", "to": status, "at": "2026-08-02T00:00:00+00:00"},
-        ]
-        document["closure"] = {
-            "at": "2026-08-02T00:00:00+00:00",
-            "reason": "Synthetic closure",
-            "approval_ids": ["approval.architect"],
-        }
-    if critical_incomplete:
-        document["constitutional_provision"] = "principle.failure-safe"
-        document["approval_policy"] = "critical"
-        document["approval_ids"] = ["approval.only-one"]
-    path = root / "governance/exceptions/EXCEPTION-001.json"
-    write_json(path, document)
-    write_json(root / "governance/exceptions/index.json", [{
-        "id": "EXCEPTION-001", "status": status,
-        "path": "governance/exceptions/EXCEPTION-001.json",
-    }])
-
-
 class AuditReportSchemaTests(unittest.TestCase):
-    def test_v1_is_intact_and_v3_is_closed_local_draft_2020_12(self):
-        self.assertEqual(hashlib.sha256(V1_SCHEMA.read_bytes()).hexdigest(), V1_SCHEMA_SHA256)
-        self.assertEqual(hashlib.sha256(V2_SCHEMA.read_bytes()).hexdigest(), V2_SCHEMA_SHA256)
+    def test_v3_is_the_active_closed_local_report_contract(self):
         schema = load_json(V3_SCHEMA)
         self.assertEqual(schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
         self.assertEqual(schema["properties"]["schema_version"], {"const": 3})
@@ -185,19 +126,12 @@ class AuditReportSchemaTests(unittest.TestCase):
         refs = [item["$ref"] for item in nodes if isinstance(item, dict) and "$ref" in item]
         self.assertTrue(all(reference.startswith("#/$defs/") for reference in refs))
 
-    def test_v1_v2_v3_select_explicitly_and_v3_invalid_fixtures_are_exact(self):
-        schemas = [load_json(path) for path in (V1_SCHEMA, V2_SCHEMA, V3_SCHEMA)]
-        reports = [
-            load_json(path / "valid/audit-report.json")
-            for path in (V1_FIXTURES, V2_FIXTURES, V3_FIXTURES)
-        ]
-        for schema_index, schema in enumerate(schemas):
-            for report_index, report in enumerate(reports):
-                with self.subTest(schema=schema_index + 1, report=report_index + 1):
-                    errors = stable_errors(schema, report)
-                    self.assertEqual(errors == [], schema_index == report_index)
-        unknown = {**reports[2], "schema_version": 99}
-        unknown_errors = stable_errors(schemas[2], unknown)
+    def test_v3_validates_active_report_and_invalid_fixtures_are_exact(self):
+        schema = load_json(V3_SCHEMA)
+        report = load_json(V3_FIXTURES / "valid/audit-report.json")
+        self.assertEqual(stable_errors(schema, report), [])
+        unknown = {**report, "schema_version": 99}
+        unknown_errors = stable_errors(schema, unknown)
         self.assertEqual(len(unknown_errors), 1)
         self.assertEqual(unknown_errors[0].validator, "const")
         cases = {
@@ -207,7 +141,7 @@ class AuditReportSchemaTests(unittest.TestCase):
         paths = sorted((V3_FIXTURES / "invalid").glob("*.json"))
         self.assertEqual([item.stem for item in paths], sorted(cases))
         for path in paths:
-            errors = stable_errors(schemas[2], load_json(path))
+            errors = stable_errors(schema, load_json(path))
             with self.subTest(path=path.name):
                 self.assertEqual(len(errors), 1)
                 self.assertEqual(errors[0].validator, cases[path.stem])
@@ -307,14 +241,19 @@ class ConstitutionalAuditTests(unittest.TestCase):
             self.assertIn("unknown-schema-version", {item["code"] for item in report["findings"]})
 
     def test_active_schema_catalog_excludes_legacy_but_protects_active_contracts(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            copy_repository(root)
-            (root / "governance/schemas/v1/contract.schema.json").write_text(
-                "{", encoding="utf-8"
-            )
-            report = audit_camilobuilder(repository_root=root)
-            self.assertEqual(report["automated_result"], "verified")
+        schema_root = ROOT / "governance/schemas"
+        self.assertEqual(
+            {
+                path.relative_to(schema_root).as_posix()
+                for path in schema_root.rglob("*.schema.json")
+            },
+            {
+                "v2/capability.schema.json",
+                "v2/work-order.schema.json",
+                "v3/architecture.schema.json",
+                "v3/audit-report.schema.json",
+            },
+        )
 
         for relative in (
             "governance/schemas/v3/audit-report.schema.json",
@@ -465,59 +404,6 @@ class ConstitutionalAuditTests(unittest.TestCase):
             report = audit_camilobuilder(repository_root=root)
             self.assertEqual(report["automated_result"], "failed")
             self.assertIn("unknown-work-order-dependency", {item["code"] for item in report["findings"]})
-
-    def test_legacy_exception_registry_is_not_an_active_verification_source(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            copy_repository(root)
-            def disorder(value):
-                builders = next(item for item in value["modules"] if item["id"] == "module.builders")
-                builders["consumes_contract_ids"] = list(reversed(builders["consumes_contract_ids"]))
-            mutate_json(root, "governance/architecture/registry.json", disorder)
-            install_exception(root, covering=True)
-            report = audit_camilobuilder(repository_root=root)
-            self.assertEqual(report["automated_result"], "failed")
-            self.assertNotIn("declared_exceptions", report)
-            self.assertFalse(any(item["outcome"] == "excepted" for item in report["findings"]))
-
-    def test_all_legacy_exception_states_are_ignored_by_active_verification(self):
-        for case in ("active", "expired", "not-started", "critical", "closed", "revoked"):
-            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
-                copy_repository(root)
-                if case == "critical":
-                    install_exception(root, critical_incomplete=True)
-                elif case == "not-started":
-                    install_exception(root)
-                    mutate_json(
-                        root,
-                        "governance/exceptions/EXCEPTION-001.json",
-                        lambda value: value.update(
-                            starts_at="2026-08-08T00:00:00+00:00",
-                            expires_at="2026-09-01T00:00:00+00:00",
-                            status_history=[{
-                                "from": "proposed", "to": "active",
-                                "at": "2026-08-08T01:00:00+00:00",
-                            }],
-                        ),
-                    )
-                else:
-                    install_exception(root, status=case)
-                report = audit_camilobuilder(repository_root=root)
-                self.assertEqual(report["automated_result"], "verified")
-                self.assertNotIn("declared_exceptions", report)
-                self.assertFalse(
-                    any(item["id"].startswith("control.exceptions.") for item in report["automated_controls"])
-                )
-
-    def test_active_verification_does_not_require_the_legacy_exception_index(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            copy_repository(root)
-            (root / "governance/exceptions/index.json").unlink()
-            report = audit_camilobuilder(repository_root=root)
-            self.assertEqual(report["automated_result"], "verified")
-            self.assertNotIn("declared_exceptions", report)
 
     def test_active_verification_does_not_require_historical_git_objects(self):
         with tempfile.TemporaryDirectory() as temporary:
