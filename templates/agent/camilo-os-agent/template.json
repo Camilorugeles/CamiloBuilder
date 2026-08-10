@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "component_type": "agent",
+  "name": "camilo-os-agent",
+  "description": "Agente operativo de Camilo OS para el piloto sintético invoice-intake.",
+  "required_variables": ["component_name"]
+}

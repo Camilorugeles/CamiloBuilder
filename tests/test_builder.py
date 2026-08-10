@@ -1214,6 +1214,13 @@ class CommandLineTests(unittest.TestCase):
             json.loads(result.stdout),
             [
                 {
+                    "name": "camilo-os-agent",
+                    "type": "agent",
+                    "version": 1,
+                    "description": "Agente operativo de Camilo OS para el piloto sintético invoice-intake.",
+                    "required_variables": ["component_name"],
+                },
+                {
                     "name": "default",
                     "type": "agent",
                     "version": 1,
@@ -1235,6 +1242,13 @@ class CommandLineTests(unittest.TestCase):
                     "required_variables": ["project_name"],
                 },
                 {
+                    "name": "agent-core",
+                    "type": "service",
+                    "version": 1,
+                    "description": "Núcleo local, determinista y sin conectores externos para agentes de Camilo OS.",
+                    "required_variables": ["component_name"],
+                },
+                {
                     "name": "default",
                     "type": "service",
                     "version": 1,
@@ -1249,8 +1263,8 @@ class CommandLineTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         templates = json.loads(result.stdout)
-        self.assertEqual(len(templates), 1)
-        self.assertEqual(templates[0]["type"], "agent")
+        self.assertEqual([item["name"] for item in templates], ["camilo-os-agent", "default"])
+        self.assertTrue(all(item["type"] == "agent" for item in templates))
 
     def test_service_template_integrates_with_management_commands(self):
         list_result = self.run_builder("list-templates", "--type", "service")

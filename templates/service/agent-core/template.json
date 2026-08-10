@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "component_type": "service",
+  "name": "agent-core",
+  "description": "Núcleo local, determinista y sin conectores externos para agentes de Camilo OS.",
+  "required_variables": ["component_name"]
+}

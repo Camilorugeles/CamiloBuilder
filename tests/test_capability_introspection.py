@@ -143,7 +143,14 @@ class CapabilityIntrospectionTests(unittest.TestCase):
         templates = self.report["templates"]["items"]
         self.assertEqual(
             [(item["component_type"], item["name"]) for item in templates],
-            [("agent", "default"), ("department", "default"), ("project", "default"), ("service", "default")],
+            [
+                ("agent", "camilo-os-agent"),
+                ("agent", "default"),
+                ("department", "default"),
+                ("project", "default"),
+                ("service", "agent-core"),
+                ("service", "default"),
+            ],
         )
         architecture = load_json(ROOT / "governance" / "architecture" / "registry.json")
         self.assertEqual(self.report["contracts"]["items"], sorted(architecture["contract_ids"]))

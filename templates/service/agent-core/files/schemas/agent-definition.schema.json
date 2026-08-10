@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://camilobuilder.local/schemas/agent-definition-v1.json",
+  "title": "Camilo OS Agent Definition v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "agent_id", "name", "version", "objective", "authorized_sources", "authorized_actions", "limits", "inputs", "outputs", "knowledge_refs", "escalation"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "agent_id": {"type": "string", "pattern": "^agent\\.[a-z0-9][a-z0-9._-]*$"},
+    "name": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"},
+    "objective": {"type": "string", "minLength": 1},
+    "authorized_sources": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/source"}},
+    "authorized_actions": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/action"}},
+    "limits": {"$ref": "#/$defs/limits"},
+    "inputs": {"$ref": "#/$defs/stringSet"},
+    "outputs": {"$ref": "#/$defs/stringSet"},
+    "knowledge_refs": {"$ref": "#/$defs/stringSet"},
+    "escalation": {"$ref": "#/$defs/escalation"}
+  },
+  "$defs": {
+    "stringSet": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "source": {"type": "object", "additionalProperties": false, "required": ["source_id", "connector_id", "permissions"], "properties": {"source_id": {"type": "string", "pattern": "^source\\.[a-z0-9][a-z0-9._-]*$"}, "connector_id": {"type": "string", "pattern": "^connector\\.[a-z0-9][a-z0-9._-]*$"}, "permissions": {"$ref": "#/$defs/stringSet"}}},
+    "action": {"type": "object", "additionalProperties": false, "required": ["action_id", "approval"], "properties": {"action_id": {"type": "string", "pattern": "^action\\.[a-z0-9][a-z0-9._-]*$"}, "approval": {"enum": ["none", "required", "forbidden"]}}},
+    "limits": {"type": "object", "additionalProperties": false, "required": ["max_inputs_per_run", "accepted_content_types", "external_writes", "destructive_actions"], "properties": {"max_inputs_per_run": {"type": "integer", "minimum": 1}, "accepted_content_types": {"$ref": "#/$defs/stringSet"}, "external_writes": {"const": false}, "destructive_actions": {"const": false}}},
+    "escalation": {"type": "object", "additionalProperties": false, "required": ["on_ambiguity", "on_technical_error", "on_missing_required_data"], "properties": {"on_ambiguity": {"const": "needs_review"}, "on_technical_error": {"const": "failed"}, "on_missing_required_data": {"const": "needs_review"}}}
+  }
+}

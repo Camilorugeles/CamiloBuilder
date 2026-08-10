@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "agent_id": "agent.{{ component_name }}",
+  "name": "Invoice Intake",
+  "version": "1.0.0",
+  "objective": "Analyze synthetic invoice messages and prepare reviewable proposals.",
+  "authorized_sources": [
+    {
+      "source_id": "source.synthetic-inbox",
+      "connector_id": "connector.in-memory",
+      "permissions": ["read"]
+    }
+  ],
+  "authorized_actions": [
+    {"action_id": "action.classify-document", "approval": "none"},
+    {"action_id": "action.delete-source", "approval": "forbidden"},
+    {"action_id": "action.extract-invoice-fields", "approval": "none"},
+    {"action_id": "action.propose-drive-destination", "approval": "required"}
+  ],
+  "limits": {
+    "max_inputs_per_run": 1,
+    "accepted_content_types": ["application/pdf", "message/rfc822"],
+    "external_writes": false,
+    "destructive_actions": false
+  },
+  "inputs": ["attachment-reference", "message-reference", "metadata"],
+  "outputs": ["action-proposal", "classification", "execution-record", "extracted-fields"],
+  "knowledge_refs": ["knowledge.synthetic-invoice-rules"],
+  "escalation": {
+    "on_ambiguity": "needs_review",
+    "on_technical_error": "failed",
+    "on_missing_required_data": "needs_review"
+  }
+}
