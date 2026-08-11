@@ -26,11 +26,18 @@ class GmailReadOnlyAdapter(ReadOnlyGoogleAdapter):
             raise UnknownReference(provider_id=self.provider_id, connector_id=self.connector_id, message="Unknown Gmail reference")
         credential = self._credential()
         item = self._call(self._client.get_message, access_token=credential.access_token, message_id=reference.reference[len(prefix):])
+        attachments = item.get("attachments", ())
+        attachment_ids = item.get("attachment_ids", ()) or tuple(value["id"] for value in attachments)
+        filenames = {
+            f"gmail:attachment:{item['id']}:{value['id']}": value["filename"]
+            for value in attachments if value.get("id") and value.get("filename")
+        }
         return {
             "reference": reference.reference,
             "metadata": {key: item[key] for key in ("from", "subject") if key in item},
             "body": item.get("body", ""),
-            "content_refs": sorted(f"gmail:attachment:{item['id']}:{value}" for value in item.get("attachment_ids", ())),
+            "content_refs": sorted(f"gmail:attachment:{item['id']}:{value}" for value in attachment_ids),
+            "attachment_filenames": dict(sorted(filenames.items())),
         }
 
     def read_content(self, reference):

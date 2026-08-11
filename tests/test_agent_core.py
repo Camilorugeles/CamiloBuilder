@@ -93,11 +93,11 @@ class GeneratedAgentCoreTests(unittest.TestCase):
         registry = TemplateRegistry(ROOT / "templates")
         self.assertEqual(
             [manifest.name for _path, manifest in registry.list("agent")],
-            ["camilo-os-agent", "default"],
+            ["camilo-os-agent", "default", "invoice-intake-shadow"],
         )
         self.assertEqual(
             [manifest.name for _path, manifest in registry.list("service")],
-            ["agent-core", "default", "google-connectors"],
+            ["agent-core", "default", "google-connectors", "invoice-intake"],
         )
         import hashlib
         for relative, expected in DEFAULT_HASHES.items():

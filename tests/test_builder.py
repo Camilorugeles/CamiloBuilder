@@ -1228,6 +1228,13 @@ class CommandLineTests(unittest.TestCase):
                     "required_variables": ["component_name"],
                 },
                 {
+                    "name": "invoice-intake-shadow",
+                    "type": "agent",
+                    "version": 1,
+                    "description": "Agente de análisis documental en modo sombra, sin acciones externas.",
+                    "required_variables": ["component_name"],
+                },
+                {
                     "name": "default",
                     "type": "department",
                     "version": 1,
@@ -1262,6 +1269,13 @@ class CommandLineTests(unittest.TestCase):
                     "description": "Conectores Google read-only, neutrales y configurados externamente para Camilo OS.",
                     "required_variables": ["component_name"],
                 },
+                {
+                    "name": "invoice-intake",
+                    "type": "service",
+                    "version": 1,
+                    "description": "Dominio determinista y en modo sombra para analizar posibles facturas.",
+                    "required_variables": ["component_name"],
+                },
             ],
         )
 
@@ -1270,7 +1284,7 @@ class CommandLineTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         templates = json.loads(result.stdout)
-        self.assertEqual([item["name"] for item in templates], ["camilo-os-agent", "default"])
+        self.assertEqual([item["name"] for item in templates], ["camilo-os-agent", "default", "invoice-intake-shadow"])
         self.assertTrue(all(item["type"] == "agent" for item in templates))
 
     def test_service_template_integrates_with_management_commands(self):

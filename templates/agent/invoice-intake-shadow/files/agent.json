@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "agent_id": "agent.{{ component_name }}",
+  "name": "Invoice Intake Shadow",
+  "version": "1.0.0",
+  "objective": "Analyze a closed batch of possible invoice documents without external effects.",
+  "authorized_sources": [
+    {
+      "source_id": "source.drive-finance-intake",
+      "connector_id": "connector.drive.finance-intake",
+      "permissions": ["content.read", "item.list", "item.metadata.read"]
+    },
+    {
+      "source_id": "source.gmail-company-invoices",
+      "connector_id": "connector.gmail.company-invoices",
+      "permissions": ["content.read", "item.list", "item.metadata.read"]
+    }
+  ],
+  "authorized_actions": [
+    {"action_id": "action.generate-review-card", "approval": "none"}
+  ],
+  "limits": {
+    "max_inputs_per_run": 1,
+    "accepted_content_types": ["application/octet-stream", "application/pdf", "application/xml", "text/xml"],
+    "external_writes": false,
+    "destructive_actions": false
+  },
+  "inputs": ["closed-message-reference", "deployment-configuration", "opaque-attachment-reference"],
+  "outputs": ["execution-record", "invoice-analysis", "review-card"],
+  "knowledge_refs": ["knowledge.invoice-intake-policy"],
+  "escalation": {
+    "on_ambiguity": "needs_review",
+    "on_technical_error": "failed",
+    "on_missing_required_data": "needs_review"
+  }
+}

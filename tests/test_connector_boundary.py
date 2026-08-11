@@ -29,7 +29,7 @@ PROTECTED_DEFAULTS = {
 class GmailClient:
     def __init__(self): self.calls = []
     def list_messages(self, **kwargs): self.calls.append(("list", kwargs)); return [{"id": "m1", "from": "synthetic@example.invalid", "subject": "Invoice", "attachment_ids": ["a1"]}]
-    def get_message(self, **kwargs): self.calls.append(("get", kwargs)); return {"id": "m1", "from": "synthetic@example.invalid", "subject": "Invoice", "body": "Synthetic", "attachment_ids": ["a1"]}
+    def get_message(self, **kwargs): self.calls.append(("get", kwargs)); return {"id": "m1", "from": "synthetic@example.invalid", "subject": "Invoice", "body": "Synthetic", "attachment_ids": ["a1"], "attachments": [{"id": "a1", "filename": "synthetic-invoice.pdf"}]}
     def get_attachment(self, **kwargs): self.calls.append(("attachment", kwargs)); return {"media_type": "application/pdf", "content": b"synthetic-pdf"}
     def send(self, **kwargs): raise AssertionError("mutator called")
 
@@ -80,7 +80,7 @@ class ConnectorBoundaryTests(unittest.TestCase):
 
     def test_templates_are_registered_without_new_component_type_and_defaults_unchanged(self):
         registry = TemplateRegistry(ROOT / "templates")
-        self.assertEqual([m.name for _, m in registry.list("service")], ["agent-core", "default", "google-connectors"])
+        self.assertEqual([m.name for _, m in registry.list("service")], ["agent-core", "default", "google-connectors", "invoice-intake"])
         self.assertEqual(sorted(path.name for path in (ROOT / "templates").iterdir()), ["agent", "department", "project", "service"])
         for path, digest in PROTECTED_DEFAULTS.items(): self.assertEqual(hashlib.sha256((ROOT / path).read_bytes()).hexdigest(), digest)
 
@@ -105,6 +105,7 @@ class ConnectorBoundaryTests(unittest.TestCase):
         self.assertEqual(gmail.list_items(source_id="source.synthetic")[0].reference, "gmail:message:m1")
         message = gmail.read(self.models.InputReference("source.synthetic", "gmail:message:m1"))
         self.assertEqual(message["content_refs"], ["gmail:attachment:m1:a1"])
+        self.assertEqual(message["attachment_filenames"], {"gmail:attachment:m1:a1": "synthetic-invoice.pdf"})
         self.assertEqual(gmail.read_content("gmail:attachment:m1:a1").content, b"synthetic-pdf")
         self.assertEqual(drive.list_items(source_id="source.synthetic")[0].reference, "drive:file:f1")
         self.assertEqual(drive.read(self.models.InputReference("source.synthetic", "drive:file:f1"))["content_refs"], ["drive:content:f1"])

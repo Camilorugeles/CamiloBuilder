@@ -146,11 +146,13 @@ class CapabilityIntrospectionTests(unittest.TestCase):
             [
                 ("agent", "camilo-os-agent"),
                 ("agent", "default"),
+                ("agent", "invoice-intake-shadow"),
                 ("department", "default"),
                 ("project", "default"),
                 ("service", "agent-core"),
                 ("service", "default"),
                 ("service", "google-connectors"),
+                ("service", "invoice-intake"),
             ],
         )
         architecture = load_json(ROOT / "governance" / "architecture" / "registry.json")

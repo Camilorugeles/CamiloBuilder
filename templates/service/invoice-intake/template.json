@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "component_type": "service",
+  "name": "invoice-intake",
+  "description": "Dominio determinista y en modo sombra para analizar posibles facturas.",
+  "required_variables": ["component_name"]
+}
