@@ -74,6 +74,17 @@ def validate_agent_definition(document: object) -> dict[str, object]:
 
 def validate_execution_record(document: object) -> dict[str, object]:
     validated = dict(_validate(document, "execution-record.schema.json", RecordError))
+    sensitive_keys = {"access_token", "client_secret", "credential", "password", "secret", "token"}
+
+    def reject_sensitive(value):
+        if isinstance(value, dict):
+            if sensitive_keys.intersection(value):
+                raise RecordError("Execution Record contains sensitive material")
+            for nested in value.values(): reject_sensitive(nested)
+        elif isinstance(value, list):
+            for nested in value: reject_sensitive(nested)
+
+    reject_sensitive(validated)
     ordered_fields = {
         "input_refs": "reference",
         "results": "result_id",

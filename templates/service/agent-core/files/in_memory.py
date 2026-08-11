@@ -8,10 +8,26 @@ from .models import ActionOutcome, ApprovalDecision, InputReference
 
 
 class InMemoryConnector:
+    connector_id = "connector.in-memory"
+    provider_id = "memory"
     def __init__(self, items: Mapping[str, Mapping[str, object]]):
         self._items = copy.deepcopy(dict(items))
         self._outcomes: dict[str, ActionOutcome] = {}
         self.execution_count = 0
+
+    def capabilities(self):
+        return frozenset({"action.execute", "content.read", "item.list", "item.metadata.read"})
+
+    def list_items(self, *, source_id):
+        from .models import ConnectorItem
+        return tuple(ConnectorItem(reference=key, metadata={}) for key in sorted(self._items))
+
+    def read_content(self, reference):
+        from .models import ConnectorContent
+        item = self._items.get(reference)
+        if not isinstance(item, (bytes, bytearray)):
+            raise KeyError(f"Unknown content reference: {reference}")
+        return ConnectorContent(reference, "application/octet-stream", bytes(item))
 
     def read(self, reference: InputReference) -> Mapping[str, object]:
         if reference.reference not in self._items:

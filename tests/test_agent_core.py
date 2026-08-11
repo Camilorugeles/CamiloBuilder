@@ -97,7 +97,7 @@ class GeneratedAgentCoreTests(unittest.TestCase):
         )
         self.assertEqual(
             [manifest.name for _path, manifest in registry.list("service")],
-            ["agent-core", "default"],
+            ["agent-core", "default", "google-connectors"],
         )
         import hashlib
         for relative, expected in DEFAULT_HASHES.items():

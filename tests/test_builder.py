@@ -1255,6 +1255,13 @@ class CommandLineTests(unittest.TestCase):
                     "description": "Plantilla predeterminada de servicio.",
                     "required_variables": ["component_name"],
                 },
+                {
+                    "name": "google-connectors",
+                    "type": "service",
+                    "version": 1,
+                    "description": "Conectores Google read-only, neutrales y configurados externamente para Camilo OS.",
+                    "required_variables": ["component_name"],
+                },
             ],
         )
 

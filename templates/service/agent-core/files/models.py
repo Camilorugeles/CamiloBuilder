@@ -14,6 +14,20 @@ class InputReference:
 
 
 @dataclass(frozen=True)
+class ConnectorItem:
+    reference: str
+    metadata: Mapping[str, object]
+    content_refs: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ConnectorContent:
+    reference: str
+    media_type: str
+    content: bytes
+
+
+@dataclass(frozen=True)
 class AgentAnalysis:
     results: tuple[dict[str, object], ...] = ()
     proposed_actions: tuple[dict[str, object], ...] = ()
@@ -21,12 +35,28 @@ class AgentAnalysis:
     escalation: dict[str, str] | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class ApprovalDecision:
     decision: str
     decided_by: str
     decision_ref: str
-    notes: str = ""
+    notes: str
+    decided_at: str | None
+
+    def __init__(self, decision, decided_by=None, decision_ref="", notes="", decided_at=None, *, actor_reference=None):
+        actor = actor_reference if actor_reference is not None else decided_by
+        if not actor:
+            raise ValueError("actor_reference is required")
+        if decided_by is not None and actor_reference is not None and decided_by != actor_reference:
+            raise ValueError("Conflicting actor references")
+        object.__setattr__(self, "decision", decision)
+        object.__setattr__(self, "decided_by", actor)
+        object.__setattr__(self, "decision_ref", decision_ref)
+        object.__setattr__(self, "notes", notes)
+        object.__setattr__(self, "decided_at", decided_at)
+
+    @property
+    def actor_reference(self): return self.decided_by
 
     def as_dict(self) -> dict[str, str]:
         return {

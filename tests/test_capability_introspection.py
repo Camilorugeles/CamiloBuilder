@@ -150,6 +150,7 @@ class CapabilityIntrospectionTests(unittest.TestCase):
                 ("project", "default"),
                 ("service", "agent-core"),
                 ("service", "default"),
+                ("service", "google-connectors"),
             ],
         )
         architecture = load_json(ROOT / "governance" / "architecture" / "registry.json")

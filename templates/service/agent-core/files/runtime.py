@@ -28,6 +28,22 @@ def _policies(definition):
     }
 
 
+def authorize_connector_operation(*, definition, source_id, operation, deployment_permissions, adapter_capabilities):
+    source = next(
+        (item for item in definition["authorized_sources"] if item["source_id"] == source_id),
+        None,
+    )
+    if source is None or operation not in source["permissions"]:
+        from .errors import CapabilityDenied
+        raise CapabilityDenied(provider_id="policy", connector_id="agent-definition", message="Agent permission denied")
+    if operation not in deployment_permissions:
+        from .errors import CapabilityDenied
+        raise CapabilityDenied(provider_id="policy", connector_id="deployment", message="Deployment permission denied")
+    if operation not in adapter_capabilities:
+        from .errors import CapabilityDenied
+        raise CapabilityDenied(provider_id="policy", connector_id="adapter", message="Adapter capability denied")
+
+
 def _new_record(definition, run_id, input_reference):
     return {
         "schema_version": 1,
@@ -86,7 +102,7 @@ def run_agent(
         )
     except Exception as error:
         return _store_failed(
-            record_store, record, "technical-error", f"{type(error).__name__}: {error}"
+            record_store, record, "technical-error", f"Technical failure: {type(error).__name__}"
         )
     record["results"] = sorted(
         [dict(item) for item in analysis.results], key=lambda item: item["result_id"]
@@ -211,7 +227,7 @@ def resume_agent(
             except Exception as error:
                 record["status"] = "failed"
                 record["errors"] = [
-                    _error("technical-error", f"{type(error).__name__}: {error}")
+                    _error("technical-error", f"Technical failure: {type(error).__name__}")
                 ]
                 validate_execution_record(record)
                 record_store.replace(record, expected_revision=previous_revision)

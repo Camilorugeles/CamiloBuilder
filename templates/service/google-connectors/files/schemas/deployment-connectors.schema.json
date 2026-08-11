@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://camilobuilder.local/schemas/deployment-connectors-v1.json",
+  "title": "Camilo OS Deployment Connector Configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "connectors"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "connectors": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/connector"}}
+  },
+  "$defs": {
+    "connector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alias", "adapter", "credential_ref", "permissions", "settings"],
+      "properties": {
+        "alias": {"type": "string", "pattern": "^connector\\.[a-z0-9][a-z0-9._-]*$"},
+        "adapter": {"enum": ["google.drive.readonly", "google.gmail.readonly"]},
+        "credential_ref": {"type": "string", "pattern": "^secret-ref:[a-zA-Z0-9._/-]+$"},
+        "permissions": {"type": "array", "uniqueItems": true, "items": {"enum": ["content.read", "item.list", "item.metadata.read"]}},
+        "settings": {"type": "object", "additionalProperties": false, "properties": {"account_alias": {"type": "string", "minLength": 1}, "root_reference": {"type": "string", "minLength": 1}}}
+      }
+    }
+  }
+}
