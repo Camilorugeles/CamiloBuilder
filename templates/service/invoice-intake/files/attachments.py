@@ -19,25 +19,32 @@ def _bounded(content: bytes):
         raise ValueError("Document size is outside permitted limits")
 
 
-def _pdf_text(content: bytes) -> str:
+def _pdf_text(content: bytes):
     _bounded(content)
     if not content.startswith(b"%PDF-"):
         raise ValueError("Invalid PDF signature")
     marker = b"%CAMILO-SYNTHETIC\n"
     if marker in content:
-        return content.split(marker, 1)[1][:MAX_TEXT_CHARS].decode("utf-8").strip()
+        return content.split(marker, 1)[1][:MAX_TEXT_CHARS].decode("utf-8").strip(), ()
     try:
         from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(content), strict=True)
         if len(reader.pages) > MAX_PDF_PAGES: raise ValueError("PDF page limit exceeded")
-        text = "\n".join((page.extract_text() or "") for page in reader.pages)
+        fragments = []
+        pages = []
+        for page_number, page in enumerate(reader.pages, 1):
+            def visitor(value, cm, tm, font, size):
+                if value and value.strip():
+                    fragments.append({"text": value, "page": page_number, "x": float(tm[4]), "y": float(tm[5]), "order": len(fragments)})
+            pages.append(page.extract_text(visitor_text=visitor) or "")
+        text = "\n".join(pages)
     except ImportError:
         # Restricted fallback for deterministic synthetic fixtures only.
         chunks = re.findall(rb"\(([^()]*)\)\s*Tj", content)
-        text = "\n".join(value.decode("latin1") for value in chunks)
+        text = "\n".join(value.decode("latin1") for value in chunks); fragments = []
     except Exception as error:
         raise ValueError("PDF cannot be safely read") from error
-    return text[:MAX_TEXT_CHARS].strip()
+    return text[:MAX_TEXT_CHARS].strip(), tuple(fragments)
 
 
 def _xml_text(content: bytes) -> str:
@@ -65,12 +72,12 @@ def extract_text(document: DocumentInput) -> ExtractedDocument:
         if document.content.startswith(b"%PDF-"): media = "application/pdf"
         elif document.content.lstrip().startswith(b"<"): media = "application/xml"
         else: raise ValueError("Unknown octet-stream content")
-    if media == "application/pdf": text = _pdf_text(document.content)
-    elif media in {"application/xml", "text/xml"}: text = _xml_text(document.content)
+    if media == "application/pdf": text, fragments = _pdf_text(document.content)
+    elif media in {"application/xml", "text/xml"}: text = _xml_text(document.content); fragments = ()
     else: raise ValueError("Unsupported document media type")
     warning = () if text.strip() else ("document-unreadable",)
     return ExtractedDocument(
         reference=document.reference, filename=document.filename, media_type=media,
         fingerprint=hashlib.sha256(document.content).hexdigest(),
-        fields={"text": text}, warnings=warning,
+        fields={"text": text, "fragments": fragments}, warnings=warning,
     )

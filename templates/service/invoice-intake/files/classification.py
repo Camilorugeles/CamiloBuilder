@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
+from .resolvers import ABSOLUTE_TOLERANCE
+
 
 REQUIRED = ("document_type", "supplier", "issue_date", "total", "currency", "recipient")
 
@@ -38,7 +40,7 @@ def classify(*, fields, config, conflicts=(), duplicate_refs=(), unreadable=Fals
     arithmetic = "unknown"
     try:
         base = Decimal(str(_value(fields, "taxable_base"))); vat = Decimal(str(_value(fields, "vat") or "0")); other = Decimal(str(_value(fields, "other_taxes") or "0")); hold = Decimal(str(_value(fields, "withholdings") or "0")); total = Decimal(str(_value(fields, "total")))
-        arithmetic = "consistent" if base + vat + other - hold == total else "inconsistent"
+        arithmetic = "consistent" if abs(base + vat + other - hold - total) <= ABSOLUTE_TOLERANCE else "inconsistent"
     except (InvalidOperation, TypeError): pass
     if arithmetic == "inconsistent": reasons.add("arithmetic-inconsistency")
     if _value(fields, "currency") not in {None, "EUR"}: reasons.add("non-eur-currency")
