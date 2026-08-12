@@ -18,7 +18,7 @@ LABELS = {
     "vat": ("cuota iva", "importe iva", "vat amount", "iva"),
     "other_taxes": ("otros impuestos", "recargo", "surcharges"),
     "withholdings": ("retencion", "retenciones", "irpf", "withholding"),
-    "total": ("total factura", "importe liquido", "amount due", "grand total", "total"),
+    "total": ("total factura", "importe total", "importe liquido", "amount due", "grand total", "total"),
     "currency": ("moneda", "currency"),
     "concept": ("concepto", "descripcion", "description"),
 }

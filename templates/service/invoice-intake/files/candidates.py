@@ -5,7 +5,8 @@ from dataclasses import dataclass, replace
 
 RELATIONS = frozenset({
     "same_line_right", "next_line", "aligned_column", "same_block",
-    "table_row", "syntax_only", "arithmetic_support",
+    "table_row", "syntax_only", "arithmetic_support", "table_header_value",
+    "aligned_below_header", "aligned_above_label", "paired_column",
 })
 
 

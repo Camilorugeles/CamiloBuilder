@@ -4,7 +4,7 @@ import re
 from decimal import Decimal, InvalidOperation
 
 from .candidates import FieldCandidate
-from .layout import build_layout
+from .layout import FiscalRow, IdentityBlock, build_layout, pair_rows
 from .semantics import (
     AMOUNT_RE, COMPANY_RE, DATE_RE, DOCUMENT_MARKERS, LABELS, RATE_RE,
     TAX_ID_RE, folded, normalize_amount, normalize_date, valid_spanish_tax_id,
@@ -14,6 +14,25 @@ from .semantics import (
 MIN_SCORE = 35
 WIN_MARGIN = 12
 ABSOLUTE_TOLERANCE = Decimal("0.02")
+FORBIDDEN_CONCEPT_VALUES = frozenset({"importe", "cantidad", "precio", "total", "base", "iva", "%", "% iva"})
+HEADER_FIELDS = {
+    "invoice_number": ("n factura", "numero factura", "numero de factura", "invoice no", "invoice number", "document number"),
+    "issue_date": ("fecha", "fecha factura", "fecha emision", "issue date", "invoice date"),
+    "due_date": ("vencimiento", "fecha vencimiento", "due date"),
+    "service_date": ("fecha servicio", "periodo servicio", "service date", "service period"),
+    "supplier": ("proveedor", "emisor", "supplier", "seller"),
+    "recipient": ("cliente", "destinatario", "receptor", "customer", "bill to"),
+    "supplier_tax_id": ("nif proveedor", "cif proveedor", "supplier tax id", "seller vat id"),
+    "recipient_tax_id": ("nif cliente", "cif cliente", "customer tax id", "recipient vat id"),
+    "taxable_base": ("base", "base imponible", "subtotal", "tax base"),
+    "vat_rate": ("%", "% iva", "tipo iva", "vat rate"),
+    "vat": ("cuota iva", "importe iva", "iva", "vat amount"),
+    "withholdings": ("retencion", "retenciones", "withholding"),
+    "other_taxes": ("otros impuestos", "recargo", "surcharges"),
+    "total": ("total", "total factura", "importe total", "importe liquido", "amount due", "grand total"),
+    "concept": ("concepto", "descripcion", "servicio", "detalle", "description"),
+    "amount_column": ("importe", "cantidad", "precio", "amount", "quantity", "price"),
+}
 
 
 def _candidate(field, value, document, line, rule, label, relation, score, alternatives=()):
@@ -29,7 +48,10 @@ def _right_value(line, label):
     if not match: return None
     words = line.text.split()
     label_words = len(label.split())
-    return " ".join(words[label_words:]).lstrip(":#.- ") or None
+    value = " ".join(words[label_words:]).lstrip(":#.- ") or None
+    if value and _header_field(value) is not None:
+        return None
+    return value
 
 
 def _labeled_candidates(document, layout):
@@ -37,6 +59,14 @@ def _labeled_candidates(document, layout):
     lines = layout.lines
     for index, line in enumerate(lines):
         normalized = folded(line.text)
+        matched_headers = {
+            "vat" if field == "vat_rate" else field
+            for field, labels in HEADER_FIELDS.items()
+            if any(re.search(r"(?:^|\s)" + re.escape(label) + r"(?:\s|$)", normalized) for label in labels)
+        }
+        if len(matched_headers) > 1:
+            matched_headers.discard("amount_column")
+        multi_header = layout.coordinates_reliable and len(matched_headers) >= 2
         fiscal_header = all(term in normalized for term in ("base imponible", "iva", "total"))
         for field, labels in LABELS.items():
             if fiscal_header and field in {"taxable_base", "vat", "total"}:
@@ -47,10 +77,13 @@ def _labeled_candidates(document, layout):
                     continue
                 raw = _right_value(line, label)
                 relation = "same_line_right"; score = 72
-                if not raw and index + 1 < len(lines):
+                if not raw and not multi_header and index + 1 < len(lines):
                     raw = lines[index + 1].text; relation = "next_line"; score = 62
                 if not raw: continue
                 values = _normalize_for_field(field, raw)
+                if not values and not multi_header and index + 1 < len(lines):
+                    raw = lines[index + 1].text; relation = "next_line"; score = 62
+                    values = _normalize_for_field(field, raw)
                 for value in values:
                     found.append(_candidate(field, value, document, line, f"label.{field}", label, relation, score))
     return found
@@ -72,9 +105,107 @@ def _normalize_for_field(field, raw):
     return [raw.strip()] if raw.strip() else []
 
 
+def _header_field(text):
+    normalized = folded(text)
+    matches = []
+    for field, labels in HEADER_FIELDS.items():
+        if any(normalized == label or normalized.startswith(label + " ") for label in labels): matches.append(field)
+    if "vencimiento" in normalized or "due date" in normalized or "servicio" in normalized or "service" in normalized:
+        matches = [field for field in matches if field != "issue_date"]
+    return matches[0] if len(set(matches)) == 1 else None
+
+
+def _table_candidates(document, layout):
+    candidates = []
+    fiscal_rows = []
+    for index, header_row in enumerate(layout.rows[:-1]):
+        fields = [_header_field(cell.text) for cell in header_row.cells]
+        recognized = [(cell, field) for cell, field in zip(header_row.cells, fields) if field]
+        if len(recognized) < 2: continue
+        value_row = layout.rows[index + 1]
+        pairs = pair_rows(header_row, value_row)
+        if not pairs or len(pairs) != len(header_row.cells): continue
+        mapped = {}
+        for pair, field in zip(pairs, fields):
+            if field is None or field in {"due_date", "service_date", "amount_column"}: continue
+            values = _normalize_for_field(field if field != "vat_rate" else "vat", pair.value.text)
+            if field == "vat_rate":
+                rates = RATE_RE.findall(pair.value.text); values = [str(item).replace(",", ".") for item in rates]
+            if field == "concept" and folded(pair.value.text) in FORBIDDEN_CONCEPT_VALUES: values = []
+            for value in values:
+                score = 82 if pair.confidence == "high" else 68
+                candidates.append(_candidate(field, value, document, pair.value, f"table.header.{field}", pair.header.text, "table_header_value", score))
+            mapped[field] = pair.value
+        fiscal = FiscalRow(mapped.get("taxable_base"), mapped.get("vat_rate"), mapped.get("vat"), mapped.get("other_taxes"), mapped.get("withholdings"), mapped.get("total"), tuple(pair.header for pair in pairs) + tuple(pair.value for pair in pairs))
+        if sum(value is not None for value in (fiscal.taxable_base, fiscal.vat_rate, fiscal.vat_amount, fiscal.total)) >= 2:
+            fiscal_rows.append(fiscal)
+            for extra_row in layout.rows[index + 2:index + 4]:
+                if abs(value_row.y - extra_row.y) > 40: break
+                extra_pairs = pair_rows(header_row, extra_row)
+                if not extra_pairs or len(extra_pairs) != len(header_row.cells): break
+                parsed = 0
+                for pair, field in zip(extra_pairs, fields):
+                    if field not in {"taxable_base", "vat", "total", "other_taxes", "withholdings", "vat_rate"}: continue
+                    values = _normalize_for_field("vat" if field == "vat_rate" else field, pair.value.text)
+                    if field == "vat_rate": values = [str(item).replace(",", ".") for item in RATE_RE.findall(pair.value.text)]
+                    parsed += bool(values)
+                    for value in values:
+                        candidates.append(_candidate(field, value, document, pair.value, f"table.additional.{field}", pair.header.text, "aligned_below_header", 76))
+                if parsed < 2: break
+    return candidates, tuple(fiscal_rows)
+
+
+def _identity_blocks(document, layout):
+    candidates = []
+    blocks = []
+    for index, header_row in enumerate(layout.rows[:-1]):
+        roles = [_header_field(cell.text) for cell in header_row.cells]
+        if len([role for role in roles if role in {"supplier", "recipient"}]) < 2: continue
+        company_row = layout.rows[index + 1]
+        company_pairs = pair_rows(header_row, company_row)
+        if not company_pairs: continue
+        tax_row = layout.rows[index + 2] if index + 2 < len(layout.rows) else None
+        tax_pairs = pair_rows(header_row, tax_row) if tax_row else ()
+        for position, role in enumerate(roles):
+            if role not in {"supplier", "recipient"} or position >= len(company_pairs): continue
+            company = company_pairs[position].value
+            tax_cell = tax_pairs[position].value if position < len(tax_pairs) else None
+            tax_values = [] if tax_cell is None else [re.sub(r"[^A-Z0-9]", "", item.upper()) for item in TAX_ID_RE.findall(tax_cell.text) if valid_spanish_tax_id(item)]
+            blocks.append(IdentityBlock(role, company, tax_cell if tax_values else None, (), (header_row.cells[position], company) + ((tax_cell,) if tax_cell else ()), 90))
+            candidates.append(_candidate(role, company.text, document, company, f"identity.{role}.company", header_row.cells[position].text, "paired_column", 90))
+            tax_field = f"{role}_tax_id"
+            for value in tax_values:
+                candidates.append(_candidate(tax_field, value, document, tax_cell, f"identity.{role}.tax-id", header_row.cells[position].text, "paired_column", 94))
+    return candidates, tuple(blocks)
+
+
+def _reject_false_concepts(candidates):
+    output = []
+    for candidate in candidates:
+        if candidate.field == "concept" and folded(candidate.value) in FORBIDDEN_CONCEPT_VALUES: continue
+        output.append(candidate)
+    return output
+
+
+def _strengthen_arithmetic(candidates):
+    by_field = {field: [item for item in candidates if item.field == field] for field in ("taxable_base", "vat", "total")}
+    supported = set()
+    for base in by_field["taxable_base"]:
+        for vat in by_field["vat"]:
+            for total in by_field["total"]:
+                try: difference = abs(Decimal(base.value) + Decimal(vat.value) - Decimal(total.value))
+                except InvalidOperation: continue
+                if difference <= ABSOLUTE_TOLERANCE:
+                    supported.update((base, vat, total))
+    return [item.strengthened(10, relation="arithmetic_support") if item in supported else item for item in candidates]
+
+
 def generate_candidates(document):
     layout = build_layout(str(document.fields.get("text", "")), document.fields.get("fragments", ()))
     candidates = _labeled_candidates(document, layout)
+    table_candidates, fiscal_rows = _table_candidates(document, layout)
+    identity_candidates, identity_blocks = _identity_blocks(document, layout)
+    candidates.extend(table_candidates); candidates.extend(identity_candidates)
     lines = layout.lines
     for index, line in enumerate(lines):
         normalized = folded(line.text)
@@ -113,7 +244,7 @@ def generate_candidates(document):
             candidates.append(_candidate(field, line.text.strip(), document, line, "company.block", None, "same_block", 48))
         if "€" in line.text or re.search(r"\bEUR\b", line.text, re.I):
             candidates.append(_candidate("currency", "EUR", document, line, "currency.marker", None, "same_block", 62))
-    return tuple(candidates)
+    return tuple(_strengthen_arithmetic(_reject_false_concepts(candidates)))
 
 
 def _field(value, source, status="extracted", confidence="high"):

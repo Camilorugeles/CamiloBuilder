@@ -9,7 +9,7 @@ from pathlib import Path
 
 from builders.project_builder import ProjectBuilder
 from builders.service_builder import ServiceBuilder
-from tests.invoice_pdf_fixtures import blank_text_pdf, textual_pdf
+from tests.invoice_pdf_fixtures import blank_text_pdf, positioned_pdf, textual_pdf
 
 
 class RealTextInvoiceExtractionTests(unittest.TestCase):
@@ -36,6 +36,11 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
     def fields(self, lines):
         content = textual_pdf(lines)
         document = self.attachments.extract_text(self.models.DocumentInput("attachment:synthetic", "synthetic.pdf", "application/pdf", content))
+        return self.extraction.extract_fields(document), document
+
+    def positioned_fields(self, rows):
+        content = positioned_pdf(rows)
+        document = self.attachments.extract_text(self.models.DocumentInput("attachment:geometry", "geometry.pdf", "application/pdf", content))
         return self.extraction.extract_fields(document), document
 
     def standard_lines(self):
@@ -136,4 +141,83 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         self.assertEqual(first, second); self.assertTrue(first)
         for candidate in first:
             self.assertTrue(candidate.field); self.assertTrue(candidate.rule_id); self.assertTrue(candidate.evidence_text)
-            self.assertIn(candidate.relation, self.resolvers.FieldCandidate.__dataclass_fields__["relation"].type if False else {"same_line_right", "next_line", "aligned_column", "same_block", "table_row", "syntax_only", "arithmetic_support"})
+            self.assertIn(candidate.relation, {"same_line_right", "next_line", "aligned_column", "same_block", "table_row", "syntax_only", "arithmetic_support", "table_header_value", "aligned_below_header", "aligned_above_label", "paired_column"})
+
+    def test_horizontal_headers_resolve_number_date_and_customer(self):
+        fields, document = self.positioned_fields([
+            [(45, "FACTURA")],
+            [(45, "N FACTURA"), (210, "FECHA EMISION"), (360, "CLIENTE")],
+            [(45, "DOC-458"), (210, "09/03/2026"), (360, "Comercio Modelo S.L.")],
+        ])
+        self.assertEqual(fields["invoice_number"]["value"], "DOC-458")
+        self.assertEqual(fields["issue_date"]["value"], "2026-03-09")
+        self.assertEqual(fields["recipient"]["value"], "Comercio Modelo S.L.")
+        self.assertTrue(document.fields["fragments"])
+
+    def test_opposed_identity_blocks_associate_each_company_and_tax_id(self):
+        fields, _ = self.positioned_fields([
+            [(45, "PROVEEDOR"), (330, "CLIENTE")],
+            [(45, "Servicios Delta S.L."), (330, "Cooperativa Horizonte COOP.")],
+            [(45, "CIF B87654321"), (330, "NIF F1234567B")],
+        ])
+        self.assertEqual(fields["supplier"]["value"], "Servicios Delta S.L.")
+        self.assertEqual(fields["supplier_tax_id"]["value"], "B87654321")
+        self.assertEqual(fields["recipient"]["value"], "Cooperativa Horizonte COOP.")
+        self.assertEqual(fields["recipient_tax_id"]["value"], "F1234567B")
+
+    def test_fiscal_table_maps_base_rate_vat_and_total(self):
+        fields, _ = self.positioned_fields([
+            [(45, "BASE IMPONIBLE"), (185, "% IVA"), (285, "CUOTA IVA"), (420, "TOTAL")],
+            [(45, "300,00"), (185, "10 %"), (285, "30,00"), (420, "330,00")],
+        ])
+        self.assertEqual(fields["taxable_base"]["value"], "300.00")
+        self.assertEqual(fields["vat"]["value"], "30.00")
+        self.assertEqual(fields["total"]["value"], "330.00")
+
+    def test_footer_total_and_repeated_total_resolve_without_max_heuristic(self):
+        fields, _ = self.positioned_fields([
+            [(45, "Subtotal"), (430, "400,00")],
+            [(45, "TOTAL FACTURA"), (430, "484,00")],
+            [(45, "IMPORTE TOTAL"), (430, "484,00")],
+        ])
+        self.assertEqual(fields["total"]["value"], "484.00")
+        conflicting, _ = self.positioned_fields([
+            [(45, "TOTAL FACTURA"), (430, "484,00")],
+            [(45, "IMPORTE TOTAL"), (430, "499,00")],
+        ])
+        self.assertEqual(conflicting["total"]["status"], "conflict")
+
+    def test_importe_header_is_not_a_concept(self):
+        fields, _ = self.positioned_fields([
+            [(45, "CONCEPTO"), (420, "IMPORTE")],
+            [(45, "Revision preventiva"), (420, "75,00")],
+        ])
+        self.assertEqual(fields["concept"]["value"], "Revision preventiva")
+        missing, _ = self.positioned_fields([[(45, "CONCEPTO"), (420, "IMPORTE")]])
+        self.assertEqual(missing["concept"]["status"], "unknown")
+
+    def test_due_and_service_dates_do_not_replace_horizontal_issue_date(self):
+        fields, _ = self.positioned_fields([
+            [(45, "FECHA EMISION"), (220, "VENCIMIENTO"), (390, "FECHA SERVICIO")],
+            [(45, "2026-02-11"), (220, "2026-03-11"), (390, "2026-02-01")],
+        ])
+        self.assertEqual(fields["issue_date"]["value"], "2026-02-11")
+
+    def test_ambiguous_geometry_fails_safely_and_linear_fallback_remains(self):
+        ambiguous, _ = self.positioned_fields([
+            [(45, "N FACTURA"), (150, "FECHA")],
+            [(98, "AMB-7"), (105, "2026-01-02")],
+        ])
+        self.assertIn(ambiguous["invoice_number"]["status"], {"unknown", "conflict"})
+        fallback, _ = self.fields(["Invoice number", "LIN-9", "Issue date", "2026-01-03"])
+        self.assertEqual(fallback["invoice_number"]["value"], "LIN-9")
+
+    def test_multi_rate_fiscal_table_remains_v1_conflict(self):
+        fields, _ = self.positioned_fields([
+            [(45, "BASE"), (180, "% IVA"), (285, "CUOTA IVA")],
+            [(45, "100,00"), (180, "10 %"), (285, "10,00")],
+            [(45, "50,00"), (180, "4 %"), (285, "2,00")],
+        ])
+        # Only an unambiguous header/value row is automatically consumed;
+        # additional plausible VAT evidence prevents a fabricated aggregate.
+        self.assertIn(fields["vat"]["status"], {"unknown", "conflict"})
