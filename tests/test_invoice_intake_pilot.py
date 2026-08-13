@@ -1,4 +1,5 @@
 import copy
+import base64
 import hashlib
 import importlib
 import importlib.util
@@ -15,6 +16,7 @@ from builders.agent_builder import AgentBuilder
 from builders.project_builder import ProjectBuilder
 from builders.service_builder import ServiceBuilder
 from template_system.registry import TemplateRegistry
+from tests.invoice_pdf_fixtures import textual_pdf
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,8 +27,7 @@ PROTECTED_DEFAULTS = {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest
 
 
 def pdf(**values):
-    text = "\n".join(f"{key}: {value}" for key, value in values.items())
-    return b"%PDF-1.4\n%CAMILO-SYNTHETIC\n" + text.encode()
+    return textual_pdf([f"{key}: {value}" for key, value in values.items()])
 
 
 def xml(**values):
@@ -278,10 +279,12 @@ class InvoiceIntakePilotTests(unittest.TestCase):
 
     def test_record_contains_only_references_derived_fields_and_no_full_content(self):
         private_body = "SYNTHETIC-DOCUMENT-CONTENT-NEVER-PERSIST"
-        content = pdf(**invoice_values()) + ("\n" + private_body).encode()
+        content = textual_pdf([*(f"{key}: {value}" for key, value in invoice_values().items()), private_body])
         record, analysis, _, _ = self.execute_case({"gmail:attachment:001:x.pdf": ("application/pdf", content)})
         serialized = self.runtime.stable_json(record)
-        self.assertNotIn(private_body, serialized); self.assertNotIn(content.decode(), serialized)
+        self.assertNotIn(private_body, serialized)
+        self.assertNotIn(base64.b64encode(content).decode("ascii"), serialized)
+        self.assertNotIn("%PDF-", serialized)
         self.assertTrue(analysis["content_fingerprints"]); self.assertEqual(record["proposed_actions"], []); self.assertEqual(record["executed_actions"], [])
 
     def test_suite_is_offline_and_repository_contains_no_real_markers(self):

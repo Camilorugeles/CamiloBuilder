@@ -1,4 +1,5 @@
 import copy
+import base64
 import hashlib
 import importlib
 import json
@@ -114,6 +115,28 @@ class ConnectorBoundaryTests(unittest.TestCase):
             before = list(client.calls)
             with self.assertRaises(self.errors.CapabilityDenied): adapter.execute(action_id="action.write", parameters={}, idempotency_key="key")
             self.assertEqual(client.calls, before)
+
+    def test_gmail_base64url_boundary_returns_exact_original_bytes(self):
+        original = b"%PDF-1.7\nsynthetic bytes only\n%%EOF\n"
+        encoded = base64.urlsafe_b64encode(original).decode("ascii").rstrip("=")
+        self.gmail_client.get_attachment = mock.Mock(return_value={"media_type": "application/pdf", "data": encoded})
+        content = self._factory().resolve("connector.gmail-test").read_content("gmail:attachment:m1:a1")
+        self.assertEqual(content.content, original)
+        self.assertFalse(content.content.startswith(b"Content-Type:"))
+
+    def test_gmail_rejects_invalid_ambiguous_and_oversized_payloads_safely(self):
+        gmail = self._factory().resolve("connector.gmail-test")
+        invalid = (
+            {"media_type": "application/pdf", "data": "%%%"},
+            {"media_type": "application/pdf", "content": b"one", "data": "dHdv"},
+            {"media_type": "application/pdf", "data": "A" * 11_184_817},
+        )
+        for payload in invalid:
+            with self.subTest(keys=sorted(payload)):
+                self.gmail_client.get_attachment = mock.Mock(return_value=payload)
+                with self.assertRaises(self.errors.ProviderRejected) as caught:
+                    gmail.read_content("gmail:attachment:m1:a1")
+                self.assertEqual(str(caught.exception), "provider-rejected: Provider attachment payload is invalid")
 
     def test_unknown_alias_reference_and_adapter_fail_safely(self):
         with self.assertRaises(self.errors.UnknownReference): self._factory().resolve("connector.missing")

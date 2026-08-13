@@ -5,6 +5,7 @@ import re
 import xml.etree.ElementTree as ET
 
 from .layout import PdfLayoutExtractor
+from .framing import canonicalize_pdf_attachment
 from .models import DocumentInput, ExtractedDocument
 
 
@@ -63,13 +64,19 @@ def extract_text(document: DocumentInput) -> ExtractedDocument:
         if document.content.startswith(b"%PDF-"): media = "application/pdf"
         elif document.content.lstrip().startswith(b"<"): media = "application/xml"
         else: raise ValueError("Unknown octet-stream content")
-    if media == "application/pdf": text, layout = _pdf_text(document.content)
+    framing_warnings = ()
+    content = document.content
+    if media == "application/pdf":
+        canonical = canonicalize_pdf_attachment(content, media)
+        content = canonical.content; media = canonical.media_type
+        framing_warnings = canonical.warnings
+        text, layout = _pdf_text(content)
     elif media in {"application/xml", "text/xml"}: text = _xml_text(document.content); layout = None
     else: raise ValueError("Unsupported document media type")
     warning = () if text.strip() else ("document-unreadable",)
     return ExtractedDocument(
         reference=document.reference, filename=document.filename, media_type=media,
-        fingerprint=hashlib.sha256(document.content).hexdigest(),
+        fingerprint=hashlib.sha256(content).hexdigest(),
         fields={"text": text, "layout": layout, "fragments": () if layout is None else layout.fragments},
-        warnings=tuple(sorted(set(warning + (() if layout is None else layout.warnings)))),
+        warnings=tuple(sorted(set(warning + framing_warnings + (() if layout is None else layout.warnings)))),
     )

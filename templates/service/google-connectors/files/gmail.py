@@ -1,9 +1,45 @@
 from __future__ import annotations
 
-from services.agent_core.errors import UnknownReference
+import base64
+import binascii
+import re
+
+from services.agent_core.errors import ProviderRejected, UnknownReference
 from services.agent_core.models import ConnectorContent, ConnectorItem, InputReference
 
 from .base import ReadOnlyGoogleAdapter
+
+
+MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
+MAX_BASE64URL_BYTES = ((MAX_ATTACHMENT_BYTES + 2) // 3) * 4 + 4
+BASE64URL = re.compile(r"^[A-Za-z0-9_-]*={0,2}$")
+
+
+def _attachment_bytes(value):
+    has_content = "content" in value
+    has_data = "data" in value
+    if has_content == has_data:
+        raise ValueError("attachment-payload-invalid")
+    if has_content:
+        content = value["content"]
+        if not isinstance(content, (bytes, bytearray, memoryview)):
+            raise ValueError("attachment-payload-invalid")
+        decoded = bytes(content)
+    else:
+        data = value["data"]
+        if not isinstance(data, str) or not data or len(data) > MAX_BASE64URL_BYTES or not BASE64URL.fullmatch(data):
+            raise ValueError("attachment-payload-invalid")
+        unpadded = data.rstrip("=")
+        if "=" in unpadded:
+            raise ValueError("attachment-payload-invalid")
+        padded = unpadded + "=" * (-len(unpadded) % 4)
+        try:
+            decoded = base64.b64decode(padded, altchars=b"-_", validate=True)
+        except (ValueError, binascii.Error):
+            raise ValueError("attachment-payload-invalid") from None
+    if not decoded or len(decoded) > MAX_ATTACHMENT_BYTES:
+        raise ValueError("attachment-payload-invalid")
+    return decoded
 
 
 class GmailReadOnlyAdapter(ReadOnlyGoogleAdapter):
@@ -47,4 +83,11 @@ class GmailReadOnlyAdapter(ReadOnlyGoogleAdapter):
             raise UnknownReference(provider_id=self.provider_id, connector_id=self.connector_id, message="Unknown Gmail content reference")
         credential = self._credential()
         value = self._call(self._client.get_attachment, access_token=credential.access_token, message_id=parts[2], attachment_id=parts[3])
-        return ConnectorContent(reference, value["media_type"], bytes(value["content"]))
+        try:
+            content = _attachment_bytes(value)
+            media_type = value["media_type"]
+            if not isinstance(media_type, str) or not media_type.strip():
+                raise ValueError("attachment-payload-invalid")
+        except (KeyError, ValueError):
+            raise ProviderRejected(provider_id=self.provider_id, connector_id=self.connector_id, message="Provider attachment payload is invalid") from None
+        return ConnectorContent(reference, media_type, content)

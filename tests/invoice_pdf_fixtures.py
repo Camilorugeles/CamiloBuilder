@@ -66,3 +66,9 @@ def visual_order_pdf(cells):
 def blank_text_pdf():
     writer = PdfWriter(); writer.add_blank_page(width=595, height=842)
     output = io.BytesIO(); writer.write(output); return output.getvalue()
+
+
+def encrypted_pdf():
+    writer = PdfWriter(); writer.add_blank_page(width=595, height=842)
+    writer.encrypt("synthetic-password")
+    output = io.BytesIO(); writer.write(output); return output.getvalue()
