@@ -4,7 +4,7 @@ import hashlib
 import re
 import xml.etree.ElementTree as ET
 
-from .layout import PdfLayoutExtractor
+from .layout import HybridPdfLayoutExtractor
 from .models import DocumentInput, ExtractedDocument
 
 
@@ -27,7 +27,7 @@ def _pdf_text(content: bytes):
     if marker in content:
         return content.split(marker, 1)[1][:MAX_TEXT_CHARS].decode("utf-8").strip(), None
     try:
-        layout = PdfLayoutExtractor().extract(content, max_pages=MAX_PDF_PAGES, max_chars=MAX_TEXT_CHARS)
+        layout = HybridPdfLayoutExtractor().extract(content, max_pages=MAX_PDF_PAGES, max_chars=MAX_TEXT_CHARS)
         text = "\n".join(line.text for line in layout.lines)
     except ImportError:
         # Restricted fallback for deterministic synthetic fixtures only.

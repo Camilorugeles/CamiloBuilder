@@ -306,3 +306,69 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         insufficient = self.layout.build_layout("N FACTURA\nSYN-4")
         self.assertEqual(insufficient.geometry, "insufficient")
         self.assertFalse(insufficient.coordinates_reliable)
+
+    def test_hybrid_layout_keeps_primary_when_fallback_is_not_better(self):
+        primary = self.layout.build_layout("", [
+            {"text": "FACTURA", "page": 1, "x": 40, "y": 700, "x1": 90, "y1": 710, "font_size": 10, "order": 0, "geometry": "observed"},
+            {"text": "N FACTURA", "page": 1, "x": 40, "y": 680, "x1": 100, "y1": 690, "font_size": 10, "order": 1, "geometry": "observed"},
+            {"text": "SYN-8", "page": 1, "x": 40, "y": 660, "x1": 80, "y1": 670, "font_size": 10, "order": 2, "geometry": "observed"},
+        ])
+        class Extractor:
+            def __init__(self, value): self.value = value; self.calls = 0
+            def extract(self, *args, **kwargs): self.calls += 1; return self.value
+        first = Extractor(primary); second = Extractor(primary)
+        result = self.layout.HybridPdfLayoutExtractor(first, second).extract(b"%PDF-synthetic", max_pages=1, max_chars=100)
+        self.assertEqual(first.calls, 1)
+        self.assertEqual(second.calls, 0)
+        self.assertNotIn("layout-fallback:selected", result.warnings)
+
+    def test_hybrid_layout_selects_structurally_better_neutral_fallback(self):
+        primary_fragments = [
+            {"text": f"TOKEN-{index}", "page": 1, "x": 40, "y": 800-index*3, "x1": 80, "y1": 808-index*3, "font_size": 8, "order": index, "geometry": "observed"}
+            for index in range(200)
+        ]
+        primary = self.layout.build_layout("", primary_fragments)
+        fallback_fragments = []
+        for index in range(120):
+            fallback_fragments.extend([
+                {"text": f"LEFT-{index}", "page": 1, "x": 40, "y": 800-index*5, "x1": 80, "y1": 808-index*5, "font_size": 8, "order": index*2, "geometry": "observed"},
+                {"text": f"RIGHT-{index}", "page": 1, "x": 260, "y": 800-index*5, "x1": 310, "y1": 808-index*5, "font_size": 8, "order": index*2+1, "geometry": "observed"},
+            ])
+        fallback = self.layout.build_layout("", fallback_fragments)
+        class Extractor:
+            def __init__(self, value): self.value = value
+            def extract(self, *args, **kwargs): return self.value
+        result = self.layout.HybridPdfLayoutExtractor(Extractor(primary), Extractor(fallback)).extract(b"%PDF-synthetic", max_pages=1, max_chars=100)
+        self.assertIn("layout-fallback:selected", result.warnings)
+        self.assertEqual(result.fragments, fallback.fragments)
+
+    def test_pdfplumber_fallback_produces_neutral_observed_layout(self):
+        content = positioned_pdf([
+            [(45, "N FACTURA"), (210, "FECHA EMISION")],
+            [(45, "FALLBACK-3"), (210, "2026-08-13")],
+        ])
+        layout = self.layout.PdfPlumberLayoutExtractor().extract(content, max_pages=2, max_chars=10_000)
+        self.assertEqual(layout.geometry, "observed")
+        self.assertTrue(layout.fragments)
+        self.assertTrue(all(type(fragment).__name__ == "TextFragment" for fragment in layout.fragments))
+
+    def test_hybrid_layout_uses_fallback_when_primary_is_unavailable(self):
+        fallback = self.layout.build_layout("", [
+            {"text": "INVOICE", "page": 1, "x": 40, "y": 700, "x1": 90, "y1": 710, "font_size": 10, "order": 0, "geometry": "observed"},
+            {"text": "TOTAL", "page": 1, "x": 40, "y": 680, "x1": 80, "y1": 690, "font_size": 10, "order": 1, "geometry": "observed"},
+            {"text": "25.00", "page": 1, "x": 200, "y": 680, "x1": 240, "y1": 690, "font_size": 10, "order": 2, "geometry": "observed"},
+        ])
+        class Broken:
+            def extract(self, *args, **kwargs): raise ValueError("synthetic primary failure")
+        class Available:
+            def extract(self, *args, **kwargs): return fallback
+        result = self.layout.HybridPdfLayoutExtractor(Broken(), Available()).extract(b"%PDF-synthetic", max_pages=1, max_chars=100)
+        self.assertIn("layout-fallback:primary-unavailable", result.warnings)
+        self.assertEqual(result.fragments, fallback.fragments)
+
+    def test_invalid_signature_is_rejected_before_any_layout_engine(self):
+        with self.assertRaisesRegex(ValueError, "Invalid PDF signature"):
+            self.attachments.extract_text(self.models.DocumentInput(
+                "attachment:framed", "framed.pdf", "application/pdf",
+                b"content-type: application/pdf\r\n\r\n%PDF-1.4",
+            ))
