@@ -354,7 +354,7 @@ def _identity_blocks(document, layout):
     blocks = []
     claimed_companies = set()
 
-    def aligned_cell(header, rows, *, require_company=False, require_tax=False):
+    def aligned_cell(header, rows, *, require_company=False, require_tax=False, role_headers=()):
         ranked = []
         for row_offset, row in rows:
             if row.page != header.page or header.y - row.y > 72: break
@@ -370,7 +370,14 @@ def _identity_blocks(document, layout):
                 horizontal /= max(1., min(header.x1-header.x0, cell.x1-cell.x0))
                 distance = abs(header.center-cell.center)
                 relative = distance/max(25., header.x1-header.x0)
-                if horizontal < .10 and relative > 1.2: continue
+                region_owned = False
+                if len(role_headers) >= 2:
+                    ownership = sorted((abs(owner.center-cell.center), owner.center, owner) for owner in role_headers)
+                    owner_span = max(owner.center for owner in role_headers) - min(owner.center for owner in role_headers)
+                    if len(ownership) > 1 and ownership[1][0]-ownership[0][0] <= max(12., owner_span*.05): continue
+                    if ownership[0][2] is not header: continue
+                    region_owned = True
+                if not region_owned and horizontal < .10 and relative > 1.2: continue
                 ranked.append((distance, -horizontal, row_offset, cell, tax_values))
         ranked.sort(key=lambda item: ((item[2], item[0]) if require_company else (item[0], item[2]), item[1], item[3].text))
         if not ranked: return None
@@ -380,17 +387,22 @@ def _identity_blocks(document, layout):
 
     for index, header_row in enumerate(layout.rows[:-1]):
         if _row_is_table(header_row): continue
-        for header in _composed_header_cells(header_row):
+        composed_headers = _composed_header_cells(header_row)
+        role_headers = tuple(
+            cell for cell in composed_headers
+            if _header_field(cell.text) in {"supplier", "recipient"}
+        )
+        for header in composed_headers:
             role = _header_field(header.text)
             if role not in {"supplier", "recipient"}: continue
             following = tuple(enumerate(layout.rows[index + 1:index + 4], 1))
-            company_match = aligned_cell(header, following, require_company=True)
+            company_match = aligned_cell(header, following, require_company=True, role_headers=role_headers)
             if company_match is None: continue
             _, negative_overlap, company_offset, company, _ = company_match
             company_index = index + company_offset
             claimed_companies.add((company.page, company.row_id, company.text))
             tax_following = tuple(enumerate(layout.rows[company_index + 1:company_index + 4], 1))
-            tax_match = aligned_cell(header, tax_following, require_tax=True)
+            tax_match = aligned_cell(header, tax_following, require_tax=True, role_headers=role_headers)
             tax_cell = tax_match[3] if tax_match else None
             tax_values = tax_match[4] if tax_match else []
             nearby_cells = tuple(

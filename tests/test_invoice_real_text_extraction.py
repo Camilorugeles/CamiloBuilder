@@ -325,6 +325,26 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         self.assertEqual(fields["supplier_tax_id"]["value"], "B23456789")
         self.assertEqual(fields["recipient_tax_id"]["value"], "F2345678C")
 
+    def test_opposed_role_headers_own_spatial_identity_regions(self):
+        fields, _ = self.positioned_fields([
+            [(45, "PROVEEDOR"), (330, "CLIENTE")],
+            [(115, "Servicios Regionales S.L."), (385, "Cooperativa Regional COOP.")],
+            [(125, "CIF B23456789"), (395, "NIF F2345678C")],
+        ])
+        self.assertEqual(fields["supplier"]["value"], "Servicios Regionales S.L.")
+        self.assertEqual(fields["supplier_tax_id"]["value"], "B23456789")
+        self.assertEqual(fields["recipient"]["value"], "Cooperativa Regional COOP.")
+        self.assertEqual(fields["recipient_tax_id"]["value"], "F2345678C")
+
+    def test_central_tax_id_has_no_identity_region_owner(self):
+        fields, _ = self.positioned_fields([
+            [(45, "PROVEEDOR"), (330, "CLIENTE")],
+            [(80, "Servicios Laterales S.L."), (350, "Cooperativa Lateral COOP.")],
+            [(183, "CIF B23456789")],
+        ])
+        self.assertEqual(fields["supplier_tax_id"]["status"], "unknown")
+        self.assertEqual(fields["recipient_tax_id"]["status"], "unknown")
+
     def test_tabular_issue_date_beats_due_date_without_global_boost(self):
         fields, _ = self.positioned_fields([
             [(45, "N FACTURA"), (190, "FECHA"), (340, "CLIENTE")],
