@@ -204,6 +204,16 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         self.assertEqual(fields["vat"]["value"], "30.00")
         self.assertEqual(fields["total"]["value"], "330.00")
 
+    def test_short_cuota_header_is_vat_only_inside_a_fiscal_table(self):
+        fields, _ = self.positioned_fields([
+            [(45, "BASE IMPONIBLE"), (185, "% IVA"), (285, "CUOTA"), (420, "TOTAL")],
+            [(45, "300,00"), (185, "10 %"), (285, "30,00"), (420, "330,00")],
+        ])
+        self.assertEqual(fields["vat"]["value"], "30.00")
+
+        isolated, _ = self.positioned_fields([[(45, "CUOTA"), (220, "30,00")]])
+        self.assertEqual(isolated["vat"]["status"], "unknown")
+
     def test_inline_vat_percentage_header_is_rate_not_amount(self):
         fields, _ = self.positioned_fields([
             [(45, "IVA 10 %"), (220, "120,00")],

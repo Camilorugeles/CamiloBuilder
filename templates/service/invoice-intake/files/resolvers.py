@@ -207,6 +207,8 @@ def _header_field(text):
 def _fiscal_header_field(text):
     field = _header_field(text)
     normalized = folded(text)
+    if normalized == "cuota":
+        return "vat"
     if (field == "vat" and RATE_RE.search(text)
             and not any(label in normalized for label in ("cuota iva", "importe iva", "vat amount"))):
         return "vat_rate"
@@ -243,6 +245,8 @@ def _table_candidates(document, layout):
         recognized = [(cell, field) for cell, field in zip(header_cells, fields) if field]
         if len(recognized) == 1 and len(first_header_row.cells) >= 2:
             header, field = recognized[0]
+            if field == "vat" and folded(header.text) == "cuota":
+                continue
             right_values = [cell for cell in first_header_row.cells if cell.x0 >= header.x1 and cell is not header]
             if right_values and field not in {"due_date", "service_date", "amount_column", "vat_rate"}:
                 value_cell = sorted(right_values, key=lambda cell: (cell.x0-header.x1, cell.text))[0]
