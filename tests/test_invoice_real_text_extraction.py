@@ -9,7 +9,7 @@ from pathlib import Path
 
 from builders.project_builder import ProjectBuilder
 from builders.service_builder import ServiceBuilder
-from tests.invoice_pdf_fixtures import blank_text_pdf, positioned_pdf, textual_pdf
+from tests.invoice_pdf_fixtures import blank_text_pdf, operation_pdf, positioned_pdf, textual_pdf, visual_order_pdf
 
 
 class RealTextInvoiceExtractionTests(unittest.TestCase):
@@ -26,6 +26,7 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         cls.extraction = importlib.import_module("services.invoice_intake.extraction")
         cls.models = importlib.import_module("services.invoice_intake.models")
         cls.resolvers = importlib.import_module("services.invoice_intake.resolvers")
+        cls.layout = importlib.import_module("services.invoice_intake.layout")
 
     @classmethod
     def tearDownClass(cls):
@@ -41,6 +42,10 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
     def positioned_fields(self, rows):
         content = positioned_pdf(rows)
         document = self.attachments.extract_text(self.models.DocumentInput("attachment:geometry", "geometry.pdf", "application/pdf", content))
+        return self.extraction.extract_fields(document), document
+
+    def content_fields(self, content):
+        document = self.attachments.extract_text(self.models.DocumentInput("attachment:advanced", "advanced.pdf", "application/pdf", content))
         return self.extraction.extract_fields(document), document
 
     def standard_lines(self):
@@ -221,3 +226,83 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         # Only an unambiguous header/value row is automatically consumed;
         # additional plausible VAT evidence prevents a fabricated aggregate.
         self.assertIn(fields["vat"]["status"], {"unknown", "conflict"})
+
+    def test_layout_document_is_neutral_and_visual_order_wins(self):
+        fields, document = self.content_fields(visual_order_pdf([
+            (45, 742, "410,00"), (45, 766, "BASE IMPONIBLE"),
+            (220, 742, "86,10"), (220, 766, "CUOTA IVA"),
+            (400, 742, "496,10"), (400, 766, "TOTAL FACTURA"),
+        ]))
+        layout = document.fields["layout"]
+        self.assertEqual(layout.geometry, "observed")
+        self.assertEqual([cell.text for cell in layout.rows[0].cells], ["BASE IMPONIBLE", "CUOTA IVA", "TOTAL FACTURA"])
+        self.assertNotEqual(layout.reading_order, tuple(range(len(layout.fragments))))
+        self.assertEqual(fields["taxable_base"]["value"], "410.00")
+        self.assertEqual(fields["vat"]["value"], "86.10")
+        self.assertEqual(fields["total"]["value"], "496.10")
+
+    def test_transformed_matrix_and_tj_fragments_keep_observed_geometry(self):
+        content = operation_pdf([
+            "q", "1 0 0 1 30 20 cm", "BT", "/F1 10 Tf",
+            "1 0 0 1 20 760 Tm", "[(N ) -20 (FACTURA)] TJ",
+            "1 0 0 1 190 760 Tm", "(FECHA EMISION) Tj",
+            "1 0 0 1 20 736 Tm", "(SYN-730) Tj",
+            "1 0 0 1 190 736 Tm", "(17-07-2026) Tj", "ET", "Q",
+        ])
+        fields, document = self.content_fields(content)
+        self.assertEqual(document.fields["layout"].geometry, "observed")
+        self.assertEqual(fields["invoice_number"]["value"], "SYN-730")
+        self.assertEqual(fields["issue_date"]["value"], "2026-07-17")
+
+    def test_monetary_header_after_customer_is_not_an_identity(self):
+        fields, _ = self.positioned_fields([
+            [(45, "CLIENTE"), (300, "FORMA DE PAGO"), (430, "IMPORTE")],
+            [(300, "TRANSFERENCIA"), (430, "75,00")],
+        ])
+        self.assertEqual(fields["recipient"]["status"], "unknown")
+        self.assertEqual(fields["supplier"]["status"], "unknown")
+
+    def test_tax_ids_follow_identity_geometry_not_appearance_order(self):
+        fields, _ = self.content_fields(visual_order_pdf([
+            (330, 720, "NIF F2345678C"), (45, 720, "CIF B23456789"),
+            (330, 744, "Cooperativa Aurora COOP."), (45, 744, "Talleres Ficticios S.L."),
+            (330, 768, "CLIENTE"), (45, 768, "PROVEEDOR"),
+        ]))
+        self.assertEqual(fields["supplier_tax_id"]["value"], "B23456789")
+        self.assertEqual(fields["recipient_tax_id"]["value"], "F2345678C")
+
+    def test_tabular_issue_date_beats_due_date_without_global_boost(self):
+        fields, _ = self.positioned_fields([
+            [(45, "N FACTURA"), (190, "FECHA"), (340, "CLIENTE")],
+            [(45, "SYN-91"), (190, "11/08/2026"), (340, "Empresa Demostracion S.L.")],
+            [(45, "VENCIMIENTO"), (190, "30/08/2026")],
+        ])
+        self.assertEqual(fields["issue_date"]["value"], "2026-08-11")
+
+    def test_isolated_tax_id_and_ambiguous_geometry_fail_safely(self):
+        isolated, _ = self.positioned_fields([
+            [(45, "PROVEEDOR"), (330, "CLIENTE")],
+            [(45, "Empresa Norte S.L."), (330, "Empresa Sur S.A.")],
+            [(190, "B34567890")],
+        ])
+        self.assertEqual(isolated["supplier_tax_id"]["status"], "unknown")
+        self.assertEqual(isolated["recipient_tax_id"]["status"], "unknown")
+        ambiguous, _ = self.positioned_fields([
+            [(45, "TOTAL FACTURA"), (330, "IMPORTE TOTAL")],
+            [(180, "99,00")],
+        ])
+        self.assertIn(ambiguous["total"]["status"], {"unknown", "conflict"})
+
+    def test_estimated_and_insufficient_geometry_are_explicit(self):
+        estimated = self.layout.build_layout("", [
+            {"text": "N FACTURA", "page": 1, "x": 40, "y": 700, "x1": 80, "y1": 710, "font_size": 10, "order": 0, "geometry": "estimated"},
+            {"text": "FECHA", "page": 1, "x": 180, "y": 700, "x1": 210, "y1": 710, "font_size": 10, "order": 1, "geometry": "estimated"},
+            {"text": "SYN-4", "page": 1, "x": 40, "y": 676, "x1": 75, "y1": 686, "font_size": 10, "order": 2, "geometry": "estimated"},
+            {"text": "2026-08-04", "page": 1, "x": 180, "y": 676, "x1": 235, "y1": 686, "font_size": 10, "order": 3, "geometry": "estimated"},
+        ])
+        self.assertEqual(estimated.geometry, "estimated")
+        self.assertTrue(all(row.geometry == "estimated" for row in estimated.rows))
+        self.assertIn("geometry-estimated", estimated.warnings)
+        insufficient = self.layout.build_layout("N FACTURA\nSYN-4")
+        self.assertEqual(insufficient.geometry, "insufficient")
+        self.assertFalse(insufficient.coordinates_reliable)

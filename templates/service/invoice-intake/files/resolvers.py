@@ -4,7 +4,7 @@ import re
 from decimal import Decimal, InvalidOperation
 
 from .candidates import FieldCandidate
-from .layout import FiscalRow, IdentityBlock, build_layout, pair_rows
+from .layout import FiscalRow, IdentityBlock, LayoutDocument, build_layout, pair_rows
 from .semantics import (
     AMOUNT_RE, COMPANY_RE, DATE_RE, DOCUMENT_MARKERS, LABELS, RATE_RE,
     TAX_ID_RE, folded, normalize_amount, normalize_date, valid_spanish_tax_id,
@@ -15,6 +15,10 @@ MIN_SCORE = 35
 WIN_MARGIN = 12
 ABSOLUTE_TOLERANCE = Decimal("0.02")
 FORBIDDEN_CONCEPT_VALUES = frozenset({"importe", "cantidad", "precio", "total", "base", "iva", "%", "% iva"})
+NON_IDENTITY_VALUES = frozenset({
+    "forma de pago", "importe", "importe liquido", "total", "base", "base imponible",
+    "iva", "vencimiento", "concepto", "cantidad", "precio", "fecha", "cliente", "proveedor",
+})
 HEADER_FIELDS = {
     "invoice_number": ("n factura", "numero factura", "numero de factura", "invoice no", "invoice number", "document number"),
     "issue_date": ("fecha", "fecha factura", "fecha emision", "issue date", "invoice date"),
@@ -54,9 +58,21 @@ def _right_value(line, label):
     return value
 
 
+def _plausible_identity(value):
+    normalized = folded(value).strip(" :#.-")
+    if not normalized or normalized in NON_IDENTITY_VALUES or _header_field(normalized) is not None: return False
+    if any(_header_field(part) is not None for part in re.split(r"\s{2,}|\||;", normalized)): return False
+    return bool(COMPANY_RE.search(value) or (len(value.split()) >= 2 and any(character.isalpha() for character in value)))
+
+
 def _labeled_candidates(document, layout):
     found = []
     lines = layout.lines
+    geometric_multi_headers = {
+        cell.text for row in layout.rows
+        if sum(_is_semantic_header(item.text) for item in row.cells) >= 2
+        for cell in row.cells
+    }
     for index, line in enumerate(lines):
         normalized = folded(line.text)
         matched_headers = {
@@ -66,7 +82,7 @@ def _labeled_candidates(document, layout):
         }
         if len(matched_headers) > 1:
             matched_headers.discard("amount_column")
-        multi_header = layout.coordinates_reliable and len(matched_headers) >= 2
+        multi_header = layout.coordinates_reliable and (len(matched_headers) >= 2 or line.text in geometric_multi_headers)
         fiscal_header = all(term in normalized for term in ("base imponible", "iva", "total"))
         for field, labels in LABELS.items():
             if fiscal_header and field in {"taxable_base", "vat", "total"}:
@@ -80,6 +96,8 @@ def _labeled_candidates(document, layout):
                 if not raw and not multi_header and index + 1 < len(lines):
                     raw = lines[index + 1].text; relation = "next_line"; score = 62
                 if not raw: continue
+                if relation == "next_line" and _header_field(raw) is not None: continue
+                if field in {"supplier", "recipient"} and not _plausible_identity(raw): continue
                 values = _normalize_for_field(field, raw)
                 if not values and not multi_header and index + 1 < len(lines):
                     raw = lines[index + 1].text; relation = "next_line"; score = 62
@@ -115,6 +133,11 @@ def _header_field(text):
     return matches[0] if len(set(matches)) == 1 else None
 
 
+def _is_semantic_header(text):
+    normalized = folded(text)
+    return any(normalized == label or normalized.startswith(label + " ") for labels in HEADER_FIELDS.values() for label in labels)
+
+
 def _table_candidates(document, layout):
     candidates = []
     fiscal_rows = []
@@ -133,7 +156,8 @@ def _table_candidates(document, layout):
                 rates = RATE_RE.findall(pair.value.text); values = [str(item).replace(",", ".") for item in rates]
             if field == "concept" and folded(pair.value.text) in FORBIDDEN_CONCEPT_VALUES: values = []
             for value in values:
-                score = 82 if pair.confidence == "high" else 68
+                score = 84 if pair.confidence == "high" else 54 if pair.confidence == "medium" else 28
+                if field in {"supplier", "recipient"} and not _plausible_identity(pair.value.text): continue
                 candidates.append(_candidate(field, value, document, pair.value, f"table.header.{field}", pair.header.text, "table_header_value", score))
             mapped[field] = pair.value
         fiscal = FiscalRow(mapped.get("taxable_base"), mapped.get("vat_rate"), mapped.get("vat"), mapped.get("other_taxes"), mapped.get("withholdings"), mapped.get("total"), tuple(pair.header for pair in pairs) + tuple(pair.value for pair in pairs))
@@ -171,11 +195,13 @@ def _identity_blocks(document, layout):
             company = company_pairs[position].value
             tax_cell = tax_pairs[position].value if position < len(tax_pairs) else None
             tax_values = [] if tax_cell is None else [re.sub(r"[^A-Z0-9]", "", item.upper()) for item in TAX_ID_RE.findall(tax_cell.text) if valid_spanish_tax_id(item)]
-            blocks.append(IdentityBlock(role, company, tax_cell if tax_values else None, (), (header_row.cells[position], company) + ((tax_cell,) if tax_cell else ()), 90))
-            candidates.append(_candidate(role, company.text, document, company, f"identity.{role}.company", header_row.cells[position].text, "paired_column", 90))
+            if not _plausible_identity(company.text): continue
+            geometry_score = 90 if company_pairs[position].confidence == "high" else 58
+            blocks.append(IdentityBlock(role, company, tax_cell if tax_values else None, (), (header_row.cells[position], company) + ((tax_cell,) if tax_cell else ()), geometry_score))
+            candidates.append(_candidate(role, company.text, document, company, f"identity.{role}.company", header_row.cells[position].text, "paired_column", geometry_score))
             tax_field = f"{role}_tax_id"
             for value in tax_values:
-                candidates.append(_candidate(tax_field, value, document, tax_cell, f"identity.{role}.tax-id", header_row.cells[position].text, "paired_column", 94))
+                candidates.append(_candidate(tax_field, value, document, tax_cell, f"identity.{role}.tax-id", header_row.cells[position].text, "paired_column", geometry_score + 4))
     return candidates, tuple(blocks)
 
 
@@ -201,7 +227,8 @@ def _strengthen_arithmetic(candidates):
 
 
 def generate_candidates(document):
-    layout = build_layout(str(document.fields.get("text", "")), document.fields.get("fragments", ()))
+    stored_layout = document.fields.get("layout")
+    layout = stored_layout if isinstance(stored_layout, LayoutDocument) else build_layout(str(document.fields.get("text", "")), document.fields.get("fragments", ()))
     candidates = _labeled_candidates(document, layout)
     table_candidates, fiscal_rows = _table_candidates(document, layout)
     identity_candidates, identity_blocks = _identity_blocks(document, layout)

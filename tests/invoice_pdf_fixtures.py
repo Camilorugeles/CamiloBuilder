@@ -42,6 +42,27 @@ def positioned_pdf(rows):
     output = io.BytesIO(); writer.write(output); return output.getvalue()
 
 
+def operation_pdf(commands):
+    """Create a synthetic PDF from explicit, caller-controlled text operations."""
+    writer = PdfWriter(); page = writer.add_blank_page(width=595, height=842)
+    font = DictionaryObject({NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"), NameObject("/BaseFont"): NameObject("/Helvetica")})
+    font_ref = writer._add_object(font)
+    page[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref})})
+    stream = DecodedStreamObject(); stream.set_data("\n".join(commands).encode("latin-1", errors="replace"))
+    page[NameObject("/Contents")] = writer._add_object(stream)
+    output = io.BytesIO(); writer.write(output); return output.getvalue()
+
+
+def visual_order_pdf(cells):
+    """Write cells in stream order while coordinates define a different visual order."""
+    commands = ["BT", "/F1 10 Tf"]
+    for x, y, text in cells:
+        escaped = str(text).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        commands.extend([f"1 0 0 1 {x} {y} Tm", f"({escaped}) Tj"])
+    commands.append("ET")
+    return operation_pdf(commands)
+
+
 def blank_text_pdf():
     writer = PdfWriter(); writer.add_blank_page(width=595, height=842)
     output = io.BytesIO(); writer.write(output); return output.getvalue()
