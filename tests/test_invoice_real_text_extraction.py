@@ -101,6 +101,12 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         fields, _ = self.fields(self.standard_lines() + ["Fecha de vencimiento: 30/06/2026", "Fecha servicio: 01/06/2026"])
         self.assertEqual(fields["issue_date"]["value"], "2026-06-15")
 
+    def test_contextual_invoice_date_requires_document_corroboration(self):
+        fields, _ = self.fields(["FACTURA COMERCIAL", "14/09/2026", "Referencia general"])
+        self.assertEqual(fields["issue_date"]["value"], "2026-09-14")
+        isolated, _ = self.fields(["Documento comercial", "14/09/2026", "Referencia general"])
+        self.assertEqual(isolated["issue_date"]["status"], "unknown")
+
     def test_ambiguous_tax_ids_and_amounts_fail_safely(self):
         fields, _ = self.fields(["FACTURA", "B11111111", "B22222222", "TOTAL 80,00", "TOTAL 90,00"])
         self.assertIn(fields["supplier_tax_id"]["status"], {"unknown", "conflict"})
@@ -178,6 +184,16 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         self.assertEqual(fields["taxable_base"]["value"], "300.00")
         self.assertEqual(fields["vat"]["value"], "30.00")
         self.assertEqual(fields["total"]["value"], "330.00")
+
+    def test_inline_vat_percentage_header_is_rate_not_amount(self):
+        fields, _ = self.positioned_fields([
+            [(45, "IVA 10 %"), (220, "120,00")],
+        ])
+        self.assertEqual(fields["vat"]["status"], "unknown")
+        explicit, _ = self.positioned_fields([
+            [(45, "CUOTA IVA 10 %"), (220, "12,00")],
+        ])
+        self.assertEqual(explicit["vat"]["value"], "12.00")
 
     def test_footer_total_and_repeated_total_resolve_without_max_heuristic(self):
         fields, _ = self.positioned_fields([

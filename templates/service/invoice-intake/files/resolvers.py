@@ -138,6 +138,10 @@ def _labeled_candidates(document, layout):
                 if not re.search(r"(?:^|\s)" + re.escape(label) + r"(?:\s|$)", normalized): continue
                 if field in {"supplier", "recipient"} and any(token in normalized for token in ("nif", "cif", "vat id", "tax id")):
                     continue
+                if (field == "vat" and RATE_RE.search(line.text)
+                        and not any(amount_label in normalized for amount_label in ("cuota iva", "importe iva", "vat amount"))
+                        and ":" not in line.text):
+                    continue
                 raw = _right_value(line, label)
                 relation = "same_line_right"; score = 72
                 if not raw and not multi_header and index + 1 < len(lines):
@@ -200,6 +204,15 @@ def _header_field(text):
     return matches[0] if len(set(matches)) == 1 else None
 
 
+def _fiscal_header_field(text):
+    field = _header_field(text)
+    normalized = folded(text)
+    if (field == "vat" and RATE_RE.search(text)
+            and not any(label in normalized for label in ("cuota iva", "importe iva", "vat amount"))):
+        return "vat_rate"
+    return field
+
+
 def _is_semantic_header(text):
     normalized = folded(text)
     return any(normalized == label or normalized.startswith(label + " ") for labels in HEADER_FIELDS.values() for label in labels)
@@ -226,7 +239,7 @@ def _table_candidates(document, layout):
                     and not any(AMOUNT_RE.fullmatch(cell.text.strip()) for cell in continuation.cells)):
                 header_cells.extend(continuation.cells); consumed_headers.add(index + 1)
         header_cells.sort(key=lambda cell: (cell.x0, -cell.y))
-        fields = [_header_field(cell.text) for cell in header_cells]
+        fields = [_fiscal_header_field(cell.text) for cell in header_cells]
         recognized = [(cell, field) for cell, field in zip(header_cells, fields) if field]
         if len(recognized) == 1 and len(first_header_row.cells) >= 2:
             header, field = recognized[0]
@@ -569,6 +582,9 @@ def resolve_field(field, candidates):
             candidate.field == "document_type" and candidate.score >= 52 for candidate in candidates
         ):
             score += 18
+        if (field == "issue_date" and winner.rule_id == "date.context"
+                and any(candidate.field == "document_type" and candidate.score >= 52 for candidate in candidates)):
+            score += 4
         links = tuple(candidate.evidence for candidate in independent if candidate.evidence)
         if field in {"supplier", "recipient"} and not any(
             link.block_id or (link.relation == "same_line_right" and "explicit_label" in link.positive_signals)
