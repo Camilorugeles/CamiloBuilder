@@ -204,6 +204,15 @@ def _header_field(text):
     return matches[0] if len(set(matches)) == 1 else None
 
 
+def _exact_header_field(text):
+    normalized = folded(text)
+    matches = [
+        field for field, labels in HEADER_FIELDS.items()
+        if any(normalized == label or normalized.replace(" ", "") == label.replace(" ", "") for label in labels)
+    ]
+    return matches[0] if len(set(matches)) == 1 else None
+
+
 def _fiscal_header_field(text):
     field = _header_field(text)
     normalized = folded(text)
@@ -231,7 +240,7 @@ def _composed_header_cells(row):
             if len(group) != width: continue
             if any(right.x0-left.x1 > 28 for left, right in zip(group, group[1:])): continue
             variants = (" ".join(cell.text for cell in group), "".join(cell.text for cell in group))
-            text = next((value for value in variants if _header_field(value)), None)
+            text = next((value for value in variants if _exact_header_field(value)), None)
             if text:
                 match = LayoutCell(
                     text, row.page, row.row_id, group[0].x0, group[-1].x1, row.y,
