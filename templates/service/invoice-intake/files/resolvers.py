@@ -31,7 +31,7 @@ NON_IDENTITY_VALUES = frozenset({
     "iva", "vencimiento", "concepto", "cantidad", "precio", "fecha", "cliente", "proveedor",
 })
 HEADER_FIELDS = {
-    "invoice_number": ("n factura", "numero factura", "numero de factura", "invoice no", "invoice number", "document number"),
+    "invoice_number": ("n factura", "numero factura", "numero de factura", "factura no", "invoice no", "invoice number", "document number"),
     "issue_date": ("fecha", "fecha factura", "fecha emision", "issue date", "invoice date"),
     "due_date": ("vencimiento", "fecha vencimiento", "due date"),
     "service_date": ("fecha servicio", "periodo servicio", "service date", "service period"),

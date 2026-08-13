@@ -174,6 +174,16 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         self.assertEqual(fields["recipient"]["value"], "Comercio Modelo S.L.")
         self.assertTrue(document.fields["fragments"])
 
+    def test_factura_no_is_a_geometric_number_header_only(self):
+        fields, _ = self.positioned_fields([
+            [(45, "FACTURA NO"), (210, "FECHA EMISION")],
+            [(45, "SYN-8804"), (210, "09/03/2026")],
+        ])
+        self.assertEqual(fields["invoice_number"]["value"], "SYN-8804")
+
+        unavailable, _ = self.fields(["Factura no disponible"])
+        self.assertEqual(unavailable["invoice_number"]["status"], "unknown")
+
     def test_opposed_identity_blocks_associate_each_company_and_tax_id(self):
         fields, _ = self.positioned_fields([
             [(45, "PROVEEDOR"), (330, "CLIENTE")],
