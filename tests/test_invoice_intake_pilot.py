@@ -211,6 +211,23 @@ class InvoiceIntakePilotTests(unittest.TestCase):
                 _, analysis, _, _ = self.execute_case({"gmail:attachment:001:x.pdf": ("application/pdf", pdf(**invoice_values(**overrides)))})
                 self.assertIn(reason, analysis["review_reasons"])
 
+    def test_arithmetic_requires_a_physically_observed_vat_amount(self):
+        _, unknown, _, _ = self.execute_case({
+            "gmail:attachment:001:x.pdf": (
+                "application/pdf", pdf(**invoice_values(vat="")),
+            )
+        })
+        self.assertEqual(unknown["arithmetic_consistency"], "unknown")
+        self.assertNotIn("arithmetic-inconsistency", unknown["review_reasons"])
+
+        _, inconsistent, _, _ = self.execute_case({
+            "gmail:attachment:001:x.pdf": (
+                "application/pdf", pdf(**invoice_values(vat="20.00")),
+            )
+        })
+        self.assertEqual(inconsistent["arithmetic_consistency"], "inconsistent")
+        self.assertIn("arithmetic-inconsistency", inconsistent["review_reasons"])
+
     def test_duplicate_key_content_fallback_sqlite_reopen_and_retry(self):
         path = self.root / "duplicates.sqlite3"; lookup = self.duplicates.SQLiteDuplicateLookup(path)
         content = pdf(**invoice_values())

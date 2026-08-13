@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
-
-from .resolvers import ABSOLUTE_TOLERANCE
+from .resolvers import arithmetic_consistency
 
 
 REQUIRED = ("document_type", "supplier", "issue_date", "total", "currency", "recipient")
@@ -37,11 +35,7 @@ def classify(*, fields, config, conflicts=(), duplicate_refs=(), unreadable=Fals
     if any(term in concept for term in rules.get("sensitive_terms", [])): reasons.add("sensitive-unrelated-document")
     if activity in {"unknown", "multiple_candidates", "personal", "internal_transfer"}: reasons.add(f"activity:{activity}")
 
-    arithmetic = "unknown"
-    try:
-        base = Decimal(str(_value(fields, "taxable_base"))); vat = Decimal(str(_value(fields, "vat") or "0")); other = Decimal(str(_value(fields, "other_taxes") or "0")); hold = Decimal(str(_value(fields, "withholdings") or "0")); total = Decimal(str(_value(fields, "total")))
-        arithmetic = "consistent" if abs(base + vat + other - hold - total) <= ABSOLUTE_TOLERANCE else "inconsistent"
-    except (InvalidOperation, TypeError): pass
+    arithmetic = arithmetic_consistency(fields)
     if arithmetic == "inconsistent": reasons.add("arithmetic-inconsistency")
     if _value(fields, "currency") not in {None, "EUR"}: reasons.add("non-eur-currency")
     if document_type in {"credit_note", "receipt", "simplified_invoice", "delivery_note", "payment_statement", "other", "unknown"}: reasons.add(f"document-type:{document_type}")
