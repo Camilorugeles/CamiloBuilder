@@ -306,3 +306,99 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         insufficient = self.layout.build_layout("N FACTURA\nSYN-4")
         self.assertEqual(insufficient.geometry, "insufficient")
         self.assertFalse(insufficient.coordinates_reliable)
+
+    def test_evidence_links_are_complete_deterministic_and_deduplicated(self):
+        fields, document = self.positioned_fields([
+            [(45, "FACTURA")],
+            [(45, "TOTAL FACTURA")],
+            [(45, "73,00")],
+        ])
+        first = self.resolvers.generate_candidates(document)
+        second = self.resolvers.generate_candidates(document)
+        self.assertEqual(first, second)
+        total_candidates = [item for item in first if item.field == "total" and item.value == "73.00"]
+        self.assertTrue(total_candidates)
+        self.assertTrue(all(item.evidence and item.evidence.observation_id for item in total_candidates))
+        self.assertEqual(len({item.evidence.observation_id for item in total_candidates}), 1)
+        self.assertEqual(fields["total"]["status"], "unknown")
+
+    def test_bounded_header_search_skips_spacer_but_not_interposed_headers(self):
+        fields, _ = self.positioned_fields([
+            [(45, "N FACTURA"), (210, "FECHA"), (360, "CLIENTE")],
+            [(520, "NOTA")],
+            [(45, "SYN-SPACE-8"), (210, "12/08/2026"), (360, "Comercio Imaginario S.L.")],
+        ])
+        self.assertEqual(fields["invoice_number"]["value"], "SYN-SPACE-8")
+        self.assertEqual(fields["issue_date"]["value"], "2026-08-12")
+        blocked, blocked_document = self.positioned_fields([
+            [(45, "N FACTURA"), (210, "FECHA")],
+            [(45, "N FACTURA"), (210, "VENCIMIENTO")],
+            [(45, "SYN-WRONG-4"), (210, "28/08/2026")],
+        ])
+        self.assertEqual(blocked["invoice_number"].get("value"), "SYN-WRONG-4")
+        matching = [
+            item for item in self.resolvers.generate_candidates(blocked_document)
+            if item.field == "invoice_number" and item.value == "SYN-WRONG-4" and item.evidence.table_id
+        ]
+        self.assertTrue(matching)
+        self.assertTrue(all(item.evidence.table_id.endswith("table-1") for item in matching))
+
+    def test_unlabelled_identity_blocks_conflict_instead_of_using_page_order(self):
+        fields, _ = self.positioned_fields([
+            [(45, "Talleres Imaginarios S.L.")],
+            [(45, "CIF B23456789")],
+            [(330, "Cooperativa Inventada COOP.")],
+            [(330, "NIF F2345678C")],
+        ])
+        self.assertEqual(fields["supplier"]["status"], "conflict")
+        self.assertEqual(fields["recipient"]["status"], "conflict")
+
+    def test_company_like_text_inside_item_table_is_not_an_identity(self):
+        fields, _ = self.positioned_fields([
+            [(45, "CONCEPTO"), (400, "IMPORTE")],
+            [(45, "Servicios Inventados S.L."), (400, "80,00")],
+        ])
+        self.assertEqual(fields["supplier"]["status"], "unknown")
+        self.assertEqual(fields["recipient"]["status"], "unknown")
+
+    def test_multiline_fiscal_header_preserves_columns_and_observed_values(self):
+        fields, document = self.positioned_fields([
+            [(45, "BASE IMPONIBLE"), (180, "% IVA")],
+            [(285, "CUOTA IVA"), (420, "TOTAL FACTURA")],
+            [(45, "250,00"), (180, "10 %"), (285, "25,00"), (420, "275,00")],
+        ])
+        self.assertEqual(fields["taxable_base"]["value"], "250.00")
+        self.assertEqual(fields["vat"]["value"], "25.00")
+        self.assertEqual(fields["total"]["value"], "275.00")
+        fiscal = [item for item in self.resolvers.generate_candidates(document) if item.evidence and item.evidence.table_id]
+        self.assertTrue(fiscal)
+        self.assertTrue(all(item.evidence.row_id for item in fiscal))
+
+    def test_subtotal_and_larger_amount_do_not_replace_labeled_final_total(self):
+        fields, _ = self.positioned_fields([
+            [(45, "SUBTOTAL"), (420, "900,00")],
+            [(45, "PRECIO"), (420, "1.200,00")],
+            [(45, "TOTAL FACTURA"), (420, "120,00")],
+        ])
+        self.assertEqual(fields["total"]["value"], "120.00")
+        self.assertNotEqual(fields["total"]["value"], "1200.00")
+
+    def test_arithmetic_support_does_not_cross_tables_or_create_missing_vat(self):
+        fields, document = self.positioned_fields([
+            [(45, "BASE"), (180, "CUOTA IVA"), (330, "TOTAL FACTURA")],
+            [(45, "100,00"), (180, "20,00"), (330, "500,00")],
+            [(45, "BASE"), (180, "CUOTA IVA"), (330, "TOTAL FACTURA")],
+            [(45, "300,00"), (180, "60,00"), (330, "120,00")],
+        ])
+        cross_total = [
+            item for item in self.resolvers.generate_candidates(document)
+            if item.field == "total" and item.value == "120.00"
+        ]
+        self.assertTrue(cross_total)
+        self.assertTrue(all(item.relation != "arithmetic_support" for item in cross_total))
+        self.assertIn(fields["total"]["status"], {"unknown", "conflict"})
+        missing, _ = self.positioned_fields([
+            [(45, "BASE IMPONIBLE"), (330, "TOTAL FACTURA")],
+            [(45, "100,00"), (330, "121,00")],
+        ])
+        self.assertEqual(missing["vat"]["status"], "unknown")

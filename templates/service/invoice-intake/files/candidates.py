@@ -11,6 +11,28 @@ RELATIONS = frozenset({
 
 
 @dataclass(frozen=True)
+class EvidenceLink:
+    observation_id: str
+    page: int
+    row_id: str | None
+    header: str | None
+    value: str
+    relation: str
+    horizontal_overlap: float | None = None
+    vertical_distance: float | None = None
+    geometry: str = "insufficient"
+    block_id: str | None = None
+    table_id: str | None = None
+    positive_signals: tuple[str, ...] = ()
+    negative_signals: tuple[str, ...] = ()
+    veto: bool = False
+
+    def __post_init__(self):
+        if self.relation not in RELATIONS:
+            raise ValueError(f"Unknown evidence relation: {self.relation}")
+
+
+@dataclass(frozen=True)
 class FieldCandidate:
     field: str
     value: str
@@ -23,6 +45,7 @@ class FieldCandidate:
     distance: float | None
     score: int
     alternatives: tuple[str, ...] = ()
+    evidence: EvidenceLink | None = None
 
     def __post_init__(self):
         if self.relation not in RELATIONS:

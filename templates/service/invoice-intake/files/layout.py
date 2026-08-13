@@ -69,16 +69,22 @@ class HeaderValuePair:
 
 @dataclass(frozen=True)
 class IdentityBlock:
+    block_id: str
     role: str
     company: LayoutCell | None
     tax_id: LayoutCell | None
     address_cells: tuple[LayoutCell, ...]
     evidence_cells: tuple[LayoutCell, ...]
+    region: tuple[float, float, float, float]
+    positive_signals: tuple[str, ...]
+    negative_signals: tuple[str, ...]
     score: int
 
 
 @dataclass(frozen=True)
 class FiscalRow:
+    table_id: str
+    row_id: str
     taxable_base: LayoutCell | None
     vat_rate: LayoutCell | None
     vat_amount: LayoutCell | None
@@ -86,6 +92,8 @@ class FiscalRow:
     withholding: LayoutCell | None
     total: LayoutCell | None
     evidence_cells: tuple[LayoutCell, ...]
+    geometry: str
+    confidence: str
 
 
 @dataclass(frozen=True)
