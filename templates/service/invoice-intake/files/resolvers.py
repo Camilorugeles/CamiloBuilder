@@ -560,15 +560,35 @@ def _field(value, source, status="extracted", confidence="high"):
 
 def resolve_field(field, candidates):
     if field == "document_type":
-        strong_types = {
-            candidate.value for candidate in candidates
+        strong = [
+            candidate for candidate in candidates
             if candidate.field == field
             and candidate.rule_id == "document.marker"
             and candidate.score >= 52
-        }
+        ]
+        strong_types = {candidate.value for candidate in strong}
         invoice_family = {"invoice", "credit_note", "simplified_invoice"}
         if len(strong_types) > 1 and not strong_types <= invoice_family:
-            return _field(None, "multiple-document-types", "conflict", "low")
+            observations = {
+                value: {
+                    candidate.evidence.observation_id
+                    for candidate in strong
+                    if candidate.value == value and candidate.evidence
+                }
+                for value in strong_types
+            }
+            exact_types = {
+                candidate.value for candidate in strong if candidate.score >= 70
+            }
+            if len(exact_types) > 1:
+                return _field(None, "multiple-document-types", "conflict", "low")
+            if len(exact_types) == 1:
+                exact_type = next(iter(exact_types))
+                if any(
+                    len(links) >= 3 and len(links) > len(observations[exact_type])
+                    for value, links in observations.items() if value != exact_type
+                ):
+                    return _field(None, "multiple-document-types", "conflict", "low")
     grouped = {}
     for candidate in candidates:
         if candidate.field == field:
