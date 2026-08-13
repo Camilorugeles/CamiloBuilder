@@ -44,7 +44,7 @@ HEADER_FIELDS = {
     "vat": ("cuota iva", "importe iva", "iva", "vat amount"),
     "withholdings": ("retencion", "retenciones", "withholding"),
     "other_taxes": ("otros impuestos", "recargo", "surcharges"),
-    "total": ("total", "total factura", "importe total", "importe liquido", "amount due", "grand total"),
+    "total": ("total", "total factura", "importe total", "importe total factura", "importe liquido", "amount due", "grand total"),
     "concept": ("concepto", "descripcion", "servicio", "detalle", "description"),
     "amount_column": ("importe", "cantidad", "precio", "amount", "quantity", "price"),
 }

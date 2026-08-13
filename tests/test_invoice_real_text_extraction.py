@@ -227,6 +227,15 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         ])
         self.assertEqual(conflicting["total"]["status"], "conflict")
 
+    def test_importe_total_factura_is_a_geometric_total_header(self):
+        fields, _ = self.positioned_fields([
+            [(45, "IMPORTE TOTAL FACTURA"), (260, "175,45")],
+        ])
+        self.assertEqual(fields["total"]["value"], "175.45")
+
+        narrative, _ = self.fields(["Importe total factura pendiente de calculo"])
+        self.assertEqual(narrative["total"]["status"], "unknown")
+
     def test_importe_header_is_not_a_concept(self):
         fields, _ = self.positioned_fields([
             [(45, "CONCEPTO"), (420, "IMPORTE")],
