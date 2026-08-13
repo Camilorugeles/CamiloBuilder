@@ -397,6 +397,29 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         self.assertTrue(matching)
         self.assertTrue(all(item.evidence.table_id.endswith("table-1") for item in matching))
 
+    def test_adjacent_header_fragments_form_bands_without_crossing_columns(self):
+        fields, _ = self.positioned_fields([
+            [(45, "N"), (57, "FACTURA"), (210, "FECHA"), (250, "EMISION")],
+            [(45, "SYN-BAND-14"), (210, "14/08/2026")],
+        ])
+        self.assertEqual(fields["invoice_number"]["value"], "SYN-BAND-14")
+        self.assertEqual(fields["issue_date"]["value"], "2026-08-14")
+
+        separated, _ = self.positioned_fields([
+            [(45, "N"), (180, "FACTURA")],
+            [(45, "SYN-NOT-LINKED")],
+        ])
+        self.assertEqual(separated["invoice_number"]["status"], "unknown")
+
+    def test_fragmented_identity_role_builds_one_coherent_block(self):
+        fields, _ = self.positioned_fields([
+            [(45, "PROVEE"), (79, "DOR")],
+            [(45, "Servicios Modelo S.L.")],
+            [(45, "CIF B23456789")],
+        ])
+        self.assertEqual(fields["supplier"]["value"], "Servicios Modelo S.L.")
+        self.assertEqual(fields["supplier_tax_id"]["value"], "B23456789")
+
     def test_unlabelled_identity_blocks_conflict_instead_of_using_page_order(self):
         fields, _ = self.positioned_fields([
             [(45, "Talleres Imaginarios S.L.")],

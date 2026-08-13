@@ -4,7 +4,7 @@ import re
 from decimal import Decimal, InvalidOperation
 
 from .candidates import EvidenceLink, FieldCandidate
-from .layout import FiscalRow, IdentityBlock, LayoutDocument, LayoutRow, build_layout, pair_rows
+from .layout import FiscalRow, IdentityBlock, LayoutCell, LayoutDocument, LayoutRow, build_layout, pair_rows
 from .semantics import (
     AMOUNT_RE, COMPANY_RE, DATE_RE, DOCUMENT_MARKERS, LABELS, RATE_RE,
     TAX_ID_RE, folded, normalize_amount, normalize_date, valid_spanish_tax_id,
@@ -196,7 +196,7 @@ def _header_field(text):
     exact = []
     prefix = []
     for field, labels in HEADER_FIELDS.items():
-        if any(normalized == label for label in labels): exact.append(field)
+        if any(normalized == label or normalized.replace(" ", "") == label.replace(" ", "") for label in labels): exact.append(field)
         elif any(normalized.startswith(label + " ") for label in labels): prefix.append(field)
     matches = exact or prefix
     if "vencimiento" in normalized or "due date" in normalized or "servicio" in normalized or "service" in normalized:
@@ -220,17 +220,44 @@ def _is_semantic_header(text):
     return any(normalized == label or normalized.startswith(label + " ") for labels in HEADER_FIELDS.values() for label in labels)
 
 
+def _composed_header_cells(row):
+    cells = list(row.cells)
+    output = []
+    index = 0
+    while index < len(cells):
+        match = None
+        for width in (3, 2):
+            group = cells[index:index + width]
+            if len(group) != width: continue
+            if any(right.x0-left.x1 > 28 for left, right in zip(group, group[1:])): continue
+            variants = (" ".join(cell.text for cell in group), "".join(cell.text for cell in group))
+            text = next((value for value in variants if _header_field(value)), None)
+            if text:
+                match = LayoutCell(
+                    text, row.page, row.row_id, group[0].x0, group[-1].x1, row.y,
+                    tuple(fragment for cell in group for fragment in cell.fragments),
+                    "observed" if all(cell.geometry == "observed" for cell in group) else "estimated",
+                )
+                break
+        if match is not None:
+            output.append(match); index += width
+        else:
+            output.append(cells[index]); index += 1
+    return tuple(output)
+
+
 def _table_candidates(document, layout):
     candidates = []
     fiscal_rows = []
     consumed_headers = set()
     for index, first_header_row in enumerate(layout.rows):
         if index in consumed_headers: continue
-        header_cells = list(first_header_row.cells)
+        header_cells = list(_composed_header_cells(first_header_row))
         first_fields = [_header_field(cell.text) for cell in header_cells]
         if index + 1 < len(layout.rows):
             continuation = layout.rows[index + 1]
-            continuation_fields = [_header_field(cell.text) for cell in continuation.cells]
+            continuation_cells = _composed_header_cells(continuation)
+            continuation_fields = [_header_field(cell.text) for cell in continuation_cells]
             fiscal_roles = {"taxable_base", "vat_rate", "vat", "other_taxes", "withholdings", "total"}
             first_fiscal = {field for field in first_fields if field in fiscal_roles}
             continuation_fiscal = {field for field in continuation_fields if field in fiscal_roles}
@@ -239,7 +266,7 @@ def _table_candidates(document, layout):
                     and any(field in fiscal_roles for field in continuation_fields)
                     and bool(continuation_fiscal - first_fiscal)
                     and not any(AMOUNT_RE.fullmatch(cell.text.strip()) for cell in continuation.cells)):
-                header_cells.extend(continuation.cells); consumed_headers.add(index + 1)
+                header_cells.extend(continuation_cells); consumed_headers.add(index + 1)
         header_cells.sort(key=lambda cell: (cell.x0, -cell.y))
         fields = [_fiscal_header_field(cell.text) for cell in header_cells]
         recognized = [(cell, field) for cell, field in zip(header_cells, fields) if field]
@@ -344,7 +371,7 @@ def _identity_blocks(document, layout):
 
     for index, header_row in enumerate(layout.rows[:-1]):
         if _row_is_table(header_row): continue
-        for header in header_row.cells:
+        for header in _composed_header_cells(header_row):
             role = _header_field(header.text)
             if role not in {"supplier", "recipient"}: continue
             following = tuple(enumerate(layout.rows[index + 1:index + 4], 1))
