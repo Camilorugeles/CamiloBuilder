@@ -43,9 +43,11 @@ def extract_fields(document: ExtractedDocument):
     output = {}
     for name in ALIASES:
         output[name] = legacy[name] if legacy[name]["status"] == "extracted" else resolved[name]
-    doc_type = str(output["document_type"]["value"] or "unknown").lower()
+    document_type = output["document_type"]
+    doc_type = str(document_type["value"] or "unknown").lower()
     if doc_type not in DOCUMENT_TYPES: doc_type = "unknown"
-    output["document_type"] = _field(doc_type, output["document_type"]["source_ref"], output["document_type"]["status"] if doc_type != "unknown" else "unknown", output["document_type"]["confidence"])
+    status = document_type["status"] if doc_type != "unknown" or document_type["status"] == "conflict" else "unknown"
+    output["document_type"] = _field(doc_type, document_type["source_ref"], status, document_type["confidence"])
     for name in ("taxable_base", "vat", "other_taxes", "withholdings", "total"):
         value = output[name]["value"]
         if value is not None:

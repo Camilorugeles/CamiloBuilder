@@ -559,6 +559,16 @@ def _field(value, source, status="extracted", confidence="high"):
 
 
 def resolve_field(field, candidates):
+    if field == "document_type":
+        strong_types = {
+            candidate.value for candidate in candidates
+            if candidate.field == field
+            and candidate.rule_id == "document.marker"
+            and candidate.score >= 52
+        }
+        invoice_family = {"invoice", "credit_note", "simplified_invoice"}
+        if len(strong_types) > 1 and not strong_types <= invoice_family:
+            return _field(None, "multiple-document-types", "conflict", "low")
     grouped = {}
     for candidate in candidates:
         if candidate.field == field:

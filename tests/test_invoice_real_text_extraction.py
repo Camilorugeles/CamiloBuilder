@@ -121,10 +121,14 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
     def test_document_variants_repeated_total_and_insufficient_labels(self):
         credit, _ = self.fields(["FACTURA RECTIFICATIVA", "Total factura: -20,00 EUR"])
         simplified, _ = self.fields(["FACTURA SIMPLIFICADA", "Total: 12,50 EUR"])
+        delivery, _ = self.fields(["ALBARAN", "Numero: ALB-42"])
+        mixed, _ = self.fields(["FACTURA", "Referencia albaran: ALB-42"])
         repeated, _ = self.fields(self.standard_lines() + ["TOTAL FACTURA: 121,00 EUR"])
         insufficient, _ = self.fields(["Documento comercial", "49,00 EUR", "2026-06-10"])
         self.assertEqual(credit["document_type"]["value"], "credit_note")
         self.assertEqual(simplified["document_type"]["value"], "simplified_invoice")
+        self.assertEqual(delivery["document_type"]["value"], "delivery_note")
+        self.assertEqual(mixed["document_type"]["status"], "conflict")
         self.assertEqual(repeated["total"]["value"], "121.00")
         self.assertEqual(insufficient["document_type"]["status"], "unknown")
 
