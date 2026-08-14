@@ -281,6 +281,30 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         # additional plausible VAT evidence prevents a fabricated aggregate.
         self.assertIn(fields["vat"]["status"], {"unknown", "conflict"})
 
+    def test_multi_row_fiscal_table_links_but_does_not_aggregate_closure(self):
+        fields, document = self.positioned_fields([
+            [(45, "BASE"), (180, "% IVA"), (285, "CUOTA")],
+            [(45, "100,00"), (180, "21 %"), (285, "21,00")],
+            [(45, "50,00"), (180, "10 %"), (285, "5,00")],
+            [(300, "TOTAL FACTURA"), (440, "176,00")],
+        ])
+        self.assertEqual(fields["taxable_base"]["status"], "conflict")
+        self.assertEqual(fields["vat"]["status"], "conflict")
+        self.assertEqual(fields["total"]["value"], "176.00")
+        candidates = self.resolvers.generate_candidates(document)
+        fiscal_ids = {
+            item.evidence.table_id for item in candidates
+            if item.field == "vat" and item.evidence and item.evidence.table_id
+        }
+        closure = [
+            item for item in candidates
+            if item.field == "total" and item.value == "176.00"
+            and item.evidence and "fiscal_table_closure" in item.evidence.positive_signals
+        ]
+        self.assertEqual(len(fiscal_ids), 1)
+        self.assertTrue(closure)
+        self.assertTrue(all(item.evidence.table_id in fiscal_ids for item in closure))
+
     def test_layout_document_is_neutral_and_visual_order_wins(self):
         fields, document = self.content_fields(visual_order_pdf([
             (45, 742, "410,00"), (45, 766, "BASE IMPONIBLE"),

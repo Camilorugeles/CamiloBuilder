@@ -259,6 +259,7 @@ def _table_candidates(document, layout):
     candidates = []
     fiscal_rows = []
     consumed_headers = set()
+    recent_fiscal_tables = {}
     for index, first_header_row in enumerate(layout.rows):
         if index in consumed_headers: continue
         header_cells = list(_composed_header_cells(first_header_row))
@@ -290,12 +291,16 @@ def _table_candidates(document, layout):
                 if field == "concept" and folded(value_cell.text) in FORBIDDEN_CONCEPT_VALUES: values = []
                 if field not in {"supplier", "recipient"} or _plausible_identity(value_cell.text):
                     for value in values:
+                        inline_table_id = f"page-{first_header_row.page}-inline-{index}"
+                        recent = recent_fiscal_tables.get(first_header_row.page)
+                        if field == "total" and recent and index-recent[1] <= 3:
+                            inline_table_id = recent[0]
                         candidates.append(_candidate(
                             field, value, document, value_cell, f"row.inline.{field}",
                             header.text, "same_line_right", 82 if value_cell.geometry == "observed" else 56,
                             geometry=value_cell.geometry,
-                            table_id=f"page-{first_header_row.page}-inline-{index}",
-                            positive=("same_row_value",),
+                            table_id=inline_table_id,
+                            positive=("same_row_value", "fiscal_table_closure") if inline_table_id == (recent[0] if recent else None) else ("same_row_value",),
                             observation_id=f"{document.reference}|{first_header_row.row_id}|{field}|{value}",
                         ))
         if len(recognized) < 2: continue
@@ -316,6 +321,7 @@ def _table_candidates(document, layout):
             if pairs and len(pairs) == len(header_cells):
                 value_rows.append((candidate_row, pairs))
         if not value_rows: continue
+        table_has_fiscal = False
         for value_row, pairs in value_rows:
             mapped = {}
             parsed_fields = set()
@@ -346,6 +352,10 @@ def _table_candidates(document, layout):
             )
             if len(parsed_fields & {"taxable_base", "vat_rate", "vat", "total"}) >= 2:
                 fiscal_rows.append(fiscal)
+                table_has_fiscal = True
+        if table_has_fiscal:
+            last_value_index = max(layout.rows.index(value_row) for value_row, _ in value_rows)
+            recent_fiscal_tables[header_row.page] = (table_id, last_value_index)
     return candidates, tuple(fiscal_rows)
 
 
