@@ -30,6 +30,14 @@ NON_IDENTITY_VALUES = frozenset({
     "forma de pago", "importe", "importe liquido", "total", "base", "base imponible",
     "iva", "vencimiento", "concepto", "cantidad", "precio", "fecha", "cliente", "proveedor",
 })
+INVOICE_NUMBER_VETO_TERMS = frozenset({
+    "forma de pago", "transferencia", "vencimiento", "concepto", "descripcion",
+    "base imponible", "subtotal", "total", "importe", "precio", "cantidad",
+})
+NON_TOTAL_HEADERS = frozenset({
+    "base", "base imponible", "subtotal", "precio", "precio unitario",
+    "cantidad", "importe unitario", "saldo anterior", "pago anterior",
+})
 HEADER_FIELDS = {
     "invoice_number": ("n factura", "numero factura", "numero de factura", "factura no", "invoice no", "invoice number", "document number"),
     "issue_date": ("fecha", "fecha factura", "fecha emision", "issue date", "invoice date"),
@@ -632,6 +640,31 @@ def _evidence_provenance(candidate):
     )
 
 
+def _semantic_veto(field, candidate):
+    value = str(candidate.value).strip()
+    normalized = folded(value)
+    raw_header = candidate.evidence.header if candidate.evidence and candidate.evidence.header else candidate.label or ""
+    header = folded(raw_header)
+    if field == "invoice_number":
+        compact_tax_id = re.sub(r"[^A-Z0-9]", "", value.upper())
+        return (
+            not any(character.isdigit() for character in value)
+            or DATE_RE.fullmatch(value) is not None
+            or AMOUNT_RE.fullmatch(value) is not None
+            or RATE_RE.fullmatch(value) is not None
+            or (TAX_ID_RE.fullmatch(value) is not None and valid_spanish_tax_id(compact_tax_id))
+            or normalized in INVOICE_NUMBER_VETO_TERMS
+            or any(normalized.startswith(term + " ") for term in INVOICE_NUMBER_VETO_TERMS)
+        )
+    if field == "total":
+        return header in NON_TOTAL_HEADERS or any(header.startswith(term + " ") for term in NON_TOTAL_HEADERS)
+    if field in {"supplier", "recipient"}:
+        return not _plausible_identity(value)
+    if field in {"supplier_tax_id", "recipient_tax_id"}:
+        return not valid_spanish_tax_id(value)
+    return False
+
+
 def resolve_field(field, candidates):
     if field == "document_type":
         strong = [
@@ -675,7 +708,9 @@ def resolve_field(field, candidates):
             current = observations.get(observation)
             if current is None or candidate.score > current.score: observations[observation] = candidate
         independent = tuple(observations.values())
-        if any(candidate.evidence and candidate.evidence.veto for candidate in independent): continue
+        if (any(candidate.evidence and candidate.evidence.veto for candidate in independent)
+                or any(_semantic_veto(field, candidate) for candidate in independent)):
+            continue
         winner = sorted(independent, key=lambda item: (-item.score, item.rule_id, item.value))[0]
         provenance = {}
         for candidate in independent:

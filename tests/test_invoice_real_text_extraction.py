@@ -459,6 +459,43 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         self.assertEqual(resolved["status"], "extracted")
         self.assertEqual(resolved["value"], "55.00")
 
+    def test_family_semantic_vetoes_block_high_scoring_false_values(self):
+        document = SimpleNamespace(reference="attachment:veto")
+        row = SimpleNamespace(row_id="page-1-row-1", page=1, text="synthetic", geometry="observed")
+
+        for value in ("TRANSFERENCIA", "2026-08-14", "121,00", "21 %", "B23456789"):
+            candidate = self.resolvers._candidate(
+                "invoice_number", value, document, row, "test.number", "N FACTURA",
+                "same_line_right", 90, observation_id=f"number-{value}",
+            )
+            with self.subTest(value=value):
+                self.assertEqual(
+                    self.resolvers.resolve_field("invoice_number", (candidate,))["status"],
+                    "unknown",
+                )
+
+        wrong_total = self.resolvers._candidate(
+            "total", "999.00", document, row, "test.total", "PRECIO UNITARIO",
+            "same_line_right", 90, observation_id="wrong-total",
+        )
+        wrong_identity = self.resolvers._candidate(
+            "supplier", "TOTAL FACTURA", document, row, "test.identity", "PROVEEDOR",
+            "same_line_right", 90, block_id="block-1", observation_id="wrong-identity",
+        )
+        self.assertEqual(self.resolvers.resolve_field("total", (wrong_total,))["status"], "unknown")
+        self.assertEqual(self.resolvers.resolve_field("supplier", (wrong_identity,))["status"], "unknown")
+
+        valid_number = self.resolvers._candidate(
+            "invoice_number", "AB-204", document, row, "test.valid-number", "N FACTURA",
+            "same_line_right", 70, observation_id="valid-number",
+        )
+        valid_total = self.resolvers._candidate(
+            "total", "121.00", document, row, "test.valid-total", "TOTAL FACTURA",
+            "same_line_right", 70, observation_id="valid-total",
+        )
+        self.assertEqual(self.resolvers.resolve_field("invoice_number", (valid_number,))["value"], "AB-204")
+        self.assertEqual(self.resolvers.resolve_field("total", (valid_total,))["value"], "121.00")
+
     def test_bounded_header_search_skips_spacer_but_not_interposed_headers(self):
         fields, _ = self.positioned_fields([
             [(45, "N FACTURA"), (210, "FECHA"), (360, "CLIENTE")],
