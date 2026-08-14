@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://camilobuilder.local/schemas/real-pilot-manifest-v1.json",
+  "title": "Camilo OS closed real-pilot manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "cases"],
+  "properties": {
+    "format": {"const": "camilo-os.real-pilot-manifest"},
+    "format_version": {"const": 1},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 15,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["case_id", "provider", "message_ref", "attachment_ref", "expected_media_type", "purpose", "authorized_on", "ground_truth_status"],
+        "properties": {
+          "case_id": {"type": "string", "pattern": "^[A-Z][A-Z0-9-]{2,63}$"},
+          "provider": {"const": "gmail"},
+          "message_ref": {"type": "string", "pattern": "^gmail:message:[A-Za-z0-9_-]{1,4096}$"},
+          "attachment_ref": {"type": "string", "pattern": "^gmail:attachment:[A-Za-z0-9_-]{1,4096}:[A-Za-z0-9_-]{1,4096}$"},
+          "expected_media_type": {"enum": ["application/pdf", "application/xml", "text/xml"]},
+          "purpose": {"enum": ["integrity_check", "shadow_pilot"]},
+          "authorized_on": {"type": "string", "format": "date"},
+          "ground_truth_status": {"enum": ["authorized", "pending", "not_available"]}
+        }
+      }
+    }
+  }
+}

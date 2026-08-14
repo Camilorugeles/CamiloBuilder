@@ -96,6 +96,9 @@ python3 builder.py create-agent demo invoice_intake --template invoice-intake-sh
 Los contratos detallados del servicio generado están en los README y schemas de
 las plantillas correspondientes.
 
+El procedimiento para operar un lote real cerrado, byte-only y de solo lectura
+está en [`docs/REAL_PILOT_RUNBOOK.md`](docs/REAL_PILOT_RUNBOOK.md).
+
 ## Pruebas
 
 ```bash

@@ -88,6 +88,11 @@ class GmailReadOnlyAdapter(ReadOnlyGoogleAdapter):
             media_type = value["media_type"]
             if not isinstance(media_type, str) or not media_type.strip():
                 raise ValueError("attachment-payload-invalid")
+            if "size" in value and (
+                not isinstance(value["size"], int) or isinstance(value["size"], bool)
+                or value["size"] != len(content)
+            ):
+                raise ValueError("attachment-payload-invalid")
         except (KeyError, ValueError):
             raise ProviderRejected(provider_id=self.provider_id, connector_id=self.connector_id, message="Provider attachment payload is invalid") from None
         return ConnectorContent(reference, media_type, content)

@@ -10,10 +10,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from jsonschema import Draft202012Validator
+
 from builders.agent_builder import AgentBuilder
 from builders.project_builder import ProjectBuilder
 from builders.service_builder import ServiceBuilder
 from template_system.registry import TemplateRegistry
+from tests.invoice_pdf_fixtures import textual_pdf
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +52,7 @@ class ConnectorBoundaryTests(unittest.TestCase):
         self.project = ProjectBuilder(Path(self.temporary.name) / "output").build("SyntheticOS")
         ServiceBuilder(self.project, "agent-core").build("agent_core")
         ServiceBuilder(self.project, "google-connectors").build("google_connectors")
+        ServiceBuilder(self.project, "invoice-intake").build("invoice_intake")
         AgentBuilder(self.project, "camilo-os-agent").build("invoice-intake")
         sys.path.insert(0, str(self.project)); self._purge()
         self.models = importlib.import_module("services.agent_core.models")
@@ -61,6 +65,9 @@ class ConnectorBoundaryTests(unittest.TestCase):
         self.deployment = importlib.import_module("services.google_connectors.deployment")
         self.factory_module = importlib.import_module("services.google_connectors.factory")
         self.gmail_client, self.drive_client = GmailClient(), DriveClient()
+        self.gmail_byte_only = importlib.import_module("services.google_connectors.gmail_byte_only")
+        self.pilot_manifest = importlib.import_module("services.google_connectors.pilot_manifest")
+        self.integrity = importlib.import_module("services.invoice_intake.integrity")
         self.credential = self.secrets.CredentialMaterial("SYNTHETIC-SECRET", frozenset({"gmail.readonly", "drive.readonly"}))
         self.secret_provider = self.secrets.FakeSecretProvider({"secret-ref:test/google": self.credential})
         self.config = {"schema_version": 1, "connectors": [
@@ -124,11 +131,117 @@ class ConnectorBoundaryTests(unittest.TestCase):
         self.assertEqual(content.content, original)
         self.assertFalse(content.content.startswith(b"Content-Type:"))
 
+    def test_closed_manifest_and_byte_only_client_prove_content_free_integrity(self):
+        case = {
+            "case_id": "REAL-SYNTHETIC-001", "provider": "gmail",
+            "message_ref": "gmail:message:m1", "attachment_ref": "gmail:attachment:m1:a1",
+            "expected_media_type": "application/pdf", "purpose": "shadow_pilot",
+            "authorized_on": "2026-08-14", "ground_truth_status": "authorized",
+        }
+        path = Path(self.temporary.name) / "pilot-real-manifest.json"
+        path.write_text(json.dumps({"format": "camilo-os.real-pilot-manifest", "format_version": 1, "cases": [case]}), encoding="utf-8")
+        manifest = self.pilot_manifest.load_pilot_manifest(path)
+        schema = json.loads((self.project / "services/google_connectors/schemas/real-pilot-manifest.schema.json").read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
+        self.assertEqual(list(Draft202012Validator(schema).iter_errors(manifest)), [])
+        allowlist = self.pilot_manifest.attachment_allowlist(manifest)
+        pdf = textual_pdf(["FACTURA", "Numero: SYN-001", "Total: 12,10 EUR"])
+        encoded = base64.urlsafe_b64encode(pdf).decode("ascii").rstrip("=")
+        calls = []
+
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *_args): pass
+            def read(self, _limit): return json.dumps({"data": encoded, "size": len(pdf)}, separators=(",", ":")).encode()
+
+        def opener(request, *, timeout):
+            calls.append((request, timeout)); return Response()
+
+        client = self.gmail_byte_only.GmailByteOnlyAttachmentClient(attachment_media_types=allowlist, opener=opener)
+        factory = self.factory_module.ConnectorFactory(
+            configuration=self.config,
+            clients={"google.gmail.readonly": client, "google.drive.readonly": self.drive_client},
+            secret_provider=self.secret_provider,
+        )
+        content = factory.resolve("connector.gmail-test").read_content(case["attachment_ref"])
+        report = self.integrity.build_integrity_report(
+            case=case, raw_observation=client.observation(case["attachment_ref"]), connector_content=content,
+        )
+        self.assertEqual(content.content, pdf)
+        self.assertEqual(report["equalities"], {"B_equals_C": True, "C_equals_D": True, "D_equals_E": True})
+        self.assertEqual(report["stages"]["D"]["validation"], "strict-valid")
+        self.assertEqual(report["stages"]["D"]["pages"], 1)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0].get_method(), "GET")
+        self.assertTrue(calls[0][0].full_url.endswith("/messages/m1/attachments/a1"))
+        serialized = json.dumps(report, sort_keys=True)
+        self.assertNotIn(encoded, serialized)
+        self.assertNotIn("SYNTHETIC-SECRET", serialized)
+        self.assertNotIn("SYN-001", serialized)
+
+    def test_manifest_allowlist_and_byte_only_response_fail_closed(self):
+        cases = [
+            {"case_id": "REAL-SYNTHETIC-002", "provider": "gmail", "message_ref": "gmail:message:m2", "attachment_ref": "gmail:attachment:m2:a2", "expected_media_type": "application/pdf", "purpose": "integrity_check", "authorized_on": "2026-08-14", "ground_truth_status": "pending"},
+            {"case_id": "REAL-SYNTHETIC-001", "provider": "gmail", "message_ref": "gmail:message:m1", "attachment_ref": "gmail:attachment:m1:a1", "expected_media_type": "application/pdf", "purpose": "shadow_pilot", "authorized_on": "2026-08-14", "ground_truth_status": "authorized"},
+        ]
+        path = Path(self.temporary.name) / "pilot-real-manifest.json"
+        path.write_text(json.dumps({"format": "camilo-os.real-pilot-manifest", "format_version": 1, "cases": cases}), encoding="utf-8")
+        with self.assertRaisesRegex(self.pilot_manifest.PilotManifestError, "pilot-manifest-order-invalid"):
+            self.pilot_manifest.load_pilot_manifest(path)
+        cases.sort(key=lambda value: value["case_id"])
+        cases[0]["attachment_ref"] = "gmail:attachment:other:a1"
+        path.write_text(json.dumps({"format": "camilo-os.real-pilot-manifest", "format_version": 1, "cases": cases}), encoding="utf-8")
+        with self.assertRaisesRegex(self.pilot_manifest.PilotManifestError, "pilot-manifest-invalid"):
+            self.pilot_manifest.load_pilot_manifest(path)
+        cases[0]["message_ref"] = "gmail:message:m1"
+        cases[0]["attachment_ref"] = "gmail:attachment:m1:a1"
+        cases[0]["authorized_on"] = "2026-02-31"
+        path.write_text(json.dumps({"format": "camilo-os.real-pilot-manifest", "format_version": 1, "cases": cases}), encoding="utf-8")
+        with self.assertRaisesRegex(self.pilot_manifest.PilotManifestError, "pilot-manifest-invalid"):
+            self.pilot_manifest.load_pilot_manifest(path)
+        calls = []
+        client = self.gmail_byte_only.GmailByteOnlyAttachmentClient(
+            attachment_media_types={"gmail:attachment:m1:a1": "application/pdf"},
+            opener=lambda *_args, **_kwargs: calls.append(True),
+        )
+        with self.assertRaisesRegex(self.gmail_byte_only.GmailByteOnlyError, "gmail-attachment-not-authorized"):
+            client.get_attachment(access_token="SYNTHETIC-SECRET", message_id="m9", attachment_id="a9")
+        self.assertEqual(calls, [])
+
+        class InvalidResponse:
+            def __enter__(self): return self
+            def __exit__(self, *_args): pass
+            def read(self, _limit): return b'{"data":"c2VjcmV0","preview":"forbidden"}'
+
+        client = self.gmail_byte_only.GmailByteOnlyAttachmentClient(
+            attachment_media_types={"gmail:attachment:m1:a1": "application/pdf"},
+            opener=lambda *_args, **_kwargs: InvalidResponse(),
+        )
+        with self.assertRaisesRegex(self.gmail_byte_only.GmailByteOnlyError, "gmail-attachment-response-invalid") as caught:
+            client.get_attachment(access_token="SYNTHETIC-SECRET", message_id="m1", attachment_id="a1")
+        self.assertNotIn("SYNTHETIC-SECRET", str(caught.exception))
+        self.assertNotIn("c2VjcmV0", str(caught.exception))
+
+        content = self.models.ConnectorContent("gmail:attachment:m1:a1", "application/pdf", textual_pdf(["SYNTHETIC"]))
+        contaminated = {
+            "representation": "gmail-base64url", "response_size_bytes": 10,
+            "encoded_size_bytes": 8, "encoded_sha256": "0" * 64,
+            "declared_decoded_size": len(content.content), "expected_media_type": "application/pdf",
+            "data": "forbidden",
+        }
+        valid_case = {
+            "case_id": "REAL-SYNTHETIC-001", "attachment_ref": "gmail:attachment:m1:a1",
+            "expected_media_type": "application/pdf",
+        }
+        with self.assertRaisesRegex(ValueError, "integrity-raw-observation-invalid"):
+            self.integrity.build_integrity_report(case=valid_case, raw_observation=contaminated, connector_content=content)
+
     def test_gmail_rejects_invalid_ambiguous_and_oversized_payloads_safely(self):
         gmail = self._factory().resolve("connector.gmail-test")
         invalid = (
             {"media_type": "application/pdf", "data": "%%%"},
             {"media_type": "application/pdf", "content": b"one", "data": "dHdv"},
+            {"media_type": "application/pdf", "content": b"one", "size": 4},
             {"media_type": "application/pdf", "data": "A" * 11_184_817},
         )
         for payload in invalid:
