@@ -620,6 +620,18 @@ def _field(value, source, status="extracted", confidence="high"):
     return {"confidence": confidence, "source_ref": source, "status": status, "value": value}
 
 
+def _evidence_provenance(candidate):
+    evidence = candidate.evidence
+    if evidence is None:
+        return ("legacy", candidate.rule_id, candidate.evidence_text)
+    if evidence.row_id is None:
+        return ("observation", evidence.observation_id)
+    return (
+        "physical", evidence.page, evidence.row_id,
+        evidence.block_id, evidence.table_id, evidence.value,
+    )
+
+
 def resolve_field(field, candidates):
     if field == "document_type":
         strong = [
@@ -665,11 +677,17 @@ def resolve_field(field, candidates):
         independent = tuple(observations.values())
         if any(candidate.evidence and candidate.evidence.veto for candidate in independent): continue
         winner = sorted(independent, key=lambda item: (-item.score, item.rule_id, item.value))[0]
+        provenance = {}
+        for candidate in independent:
+            key = _evidence_provenance(candidate)
+            current = provenance.get(key)
+            if current is None or candidate.score > current.score:
+                provenance[key] = candidate
         negatives = {
             signal for candidate in independent if candidate.evidence
             for signal in candidate.evidence.negative_signals
         }
-        score = winner.score + min(24, 24 * (len(independent)-1)) - min(24, 8 * len(negatives))
+        score = winner.score + min(16, 8 * (len(provenance)-1)) - min(24, 8 * len(negatives))
         if field == "invoice_number" and any(
             candidate.field == "document_type" and candidate.score >= 52 for candidate in candidates
         ):

@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 from builders.project_builder import ProjectBuilder
 from builders.service_builder import ServiceBuilder
@@ -419,6 +420,44 @@ class RealTextInvoiceExtractionTests(unittest.TestCase):
         self.assertTrue(all(item.evidence and item.evidence.observation_id for item in total_candidates))
         self.assertEqual(len({item.evidence.observation_id for item in total_candidates}), 1)
         self.assertEqual(fields["total"]["status"], "unknown")
+
+    def test_corroboration_is_limited_and_requires_independent_provenance(self):
+        document = SimpleNamespace(reference="attachment:corroboration")
+        same_row = SimpleNamespace(row_id="page-1-row-1", page=1, text="55,00", geometry="observed")
+        duplicate_a = self.resolvers._candidate(
+            "total", "55.00", document, same_row, "test.a", "TOTAL",
+            "same_line_right", 50, observation_id="observation-a",
+        )
+        duplicate_b = self.resolvers._candidate(
+            "total", "55.00", document, same_row, "test.b", "TOTAL FACTURA",
+            "aligned_column", 50, observation_id="observation-b",
+        )
+        self.assertEqual(
+            self.resolvers.resolve_field("total", (duplicate_a, duplicate_b))["status"],
+            "unknown",
+        )
+
+        base_row = SimpleNamespace(row_id="page-1-row-base", page=1, text="55,00", geometry="observed")
+        independent = [self.resolvers._candidate(
+            "total", "55.00", document, base_row, "test.base", "TOTAL",
+            "aligned_column", 40, observation_id="observation-base",
+        )]
+        for number in (2, 3):
+            row = SimpleNamespace(
+                row_id=f"page-1-row-{number}", page=1,
+                text="55,00", geometry="observed",
+            )
+            independent.append(self.resolvers._candidate(
+                "total", "55.00", document, row, f"test.{number}", "TOTAL",
+                "aligned_column", 40, observation_id=f"observation-{number}",
+            ))
+        self.assertEqual(
+            self.resolvers.resolve_field("total", independent[:2])["status"],
+            "unknown",
+        )
+        resolved = self.resolvers.resolve_field("total", independent)
+        self.assertEqual(resolved["status"], "extracted")
+        self.assertEqual(resolved["value"], "55.00")
 
     def test_bounded_header_search_skips_spacer_but_not_interposed_headers(self):
         fields, _ = self.positioned_fields([
