@@ -98,6 +98,8 @@ las plantillas correspondientes.
 
 El procedimiento para operar un lote real cerrado, byte-only y de solo lectura
 está en [`docs/REAL_PILOT_RUNBOOK.md`](docs/REAL_PILOT_RUNBOOK.md).
+La aceptación real read-only está en
+[`docs/REAL_PILOT_ACCEPTANCE_2026-08-15.md`](docs/REAL_PILOT_ACCEPTANCE_2026-08-15.md).
 
 ## Pruebas
 

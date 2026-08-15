@@ -112,3 +112,9 @@ Desactivar el piloto retirando la configuración y credencial externas. Para una
 regresión de código, aplicar `git revert` al commit concreto, ejecutar ACTIVE,
 HISTORICAL, governance, compileall y `git diff --check`, y publicar mediante push
 normal. No reescribir historia ni modificar documentos reales.
+
+## Evidencia de aceptación
+
+La primera aceptación real de la frontera byte-only y sus métricas conservadoras
+se documenta en
+[`REAL_PILOT_ACCEPTANCE_2026-08-15.md`](REAL_PILOT_ACCEPTANCE_2026-08-15.md).
