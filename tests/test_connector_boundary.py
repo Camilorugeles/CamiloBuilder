@@ -66,6 +66,7 @@ class ConnectorBoundaryTests(unittest.TestCase):
         self.factory_module = importlib.import_module("services.google_connectors.factory")
         self.gmail_client, self.drive_client = GmailClient(), DriveClient()
         self.gmail_byte_only = importlib.import_module("services.google_connectors.gmail_byte_only")
+        self.gmail_discovery = importlib.import_module("services.google_connectors.gmail_discovery")
         self.pilot_manifest = importlib.import_module("services.google_connectors.pilot_manifest")
         self.integrity = importlib.import_module("services.invoice_intake.integrity")
         self.credential = self.secrets.CredentialMaterial("SYNTHETIC-SECRET", frozenset({"gmail.readonly", "drive.readonly"}))
@@ -178,6 +179,61 @@ class ConnectorBoundaryTests(unittest.TestCase):
         self.assertNotIn(encoded, serialized)
         self.assertNotIn("SYNTHETIC-SECRET", serialized)
         self.assertNotIn("SYN-001", serialized)
+
+    def test_gmail_discovery_builds_a_bounded_content_free_manifest(self):
+        calls = []
+
+        class Response:
+            def __init__(self, value): self.value = value
+            def __enter__(self): return self
+            def __exit__(self, *_args): pass
+            def read(self, _limit): return json.dumps(self.value, separators=(",", ":")).encode()
+
+        def opener(request, *, timeout):
+            calls.append((request, timeout))
+            if "?q=" in request.full_url:
+                return Response({"messages": [{"id": "m1"}]})
+            return Response({"id": "m1", "payload": {"parts": [
+                {"filename": "invoice.pdf", "mimeType": "application/pdf", "body": {"attachmentId": "a1"}},
+                {"filename": "body.txt", "mimeType": "text/plain", "body": {}},
+                {"filename": "nested", "mimeType": "multipart/mixed", "body": {}, "parts": [
+                    {"filename": "invoice.xml", "mimeType": "application/xml", "body": {"attachmentId": "a2"}},
+                ]},
+            ]}})
+
+        client = self.gmail_discovery.GmailInvoiceDiscoveryClient(opener=opener)
+        manifest = client.discover(access_token="SYNTHETIC-SECRET", max_messages=5, authorized_on="2026-08-15")
+        self.assertEqual(len(manifest["cases"]), 2)
+        self.assertEqual({case["attachment_ref"] for case in manifest["cases"]}, {
+            "gmail:attachment:m1:a1", "gmail:attachment:m1:a2",
+        })
+        self.assertEqual({case["ground_truth_status"] for case in manifest["cases"]}, {"pending"})
+        serialized = json.dumps(manifest, sort_keys=True)
+        self.assertNotIn("invoice.pdf", serialized)
+        self.assertNotIn("body.txt", serialized)
+        self.assertNotIn("SYNTHETIC-SECRET", serialized)
+        self.assertEqual(client.audit_summary(), {
+            "list_requests": 1, "message_metadata_reads": 1, "gmail_mutations": 0,
+            "unread_changes": 0, "label_changes": 0, "drive_writes": 0,
+        })
+        self.assertTrue(all(call[0].get_method() == "GET" for call in calls))
+        self.assertIn("messages%2Fid", calls[0][0].full_url)
+        self.assertIn("fields=", calls[1][0].full_url)
+        self.assertNotIn("snippet", calls[1][0].full_url)
+
+    def test_gmail_discovery_rejects_unbounded_or_contaminated_responses(self):
+        client = self.gmail_discovery.GmailInvoiceDiscoveryClient(opener=lambda *_args, **_kwargs: None)
+        with self.assertRaisesRegex(self.gmail_discovery.GmailDiscoveryError, "gmail-discovery-limit-invalid"):
+            client.discover(access_token="secret", max_messages=16)
+
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *_args): pass
+            def read(self, _limit): return b'{"messages":[{"id":"m1","snippet":"forbidden"}]}'
+
+        client = self.gmail_discovery.GmailInvoiceDiscoveryClient(opener=lambda *_args, **_kwargs: Response())
+        with self.assertRaisesRegex(self.gmail_discovery.GmailDiscoveryError, "gmail-discovery-response-invalid"):
+            client.discover(access_token="secret")
 
     def test_manifest_allowlist_and_byte_only_response_fail_closed(self):
         cases = [
