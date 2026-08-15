@@ -287,6 +287,17 @@ class InvoiceIntakePilotTests(unittest.TestCase):
             pipeline.validate_closed_batch(configuration=self.validate_config(self.config(refs)), connector=connector)
         self.assertEqual(connector.execution_count, 0)
 
+    def test_closed_manifest_without_sender_uses_opaque_message_buckets(self):
+        pipeline = importlib.import_module("services.invoice_intake.pipeline")
+        refs = ("gmail:message:001", "gmail:message:002", "gmail:message:003")
+        messages = {ref: {"metadata": {}, "content_refs": []} for ref in refs}
+        connector = SyntheticConnector(messages, {})
+        result = pipeline.validate_closed_batch(
+            configuration=self.validate_config(self.config(refs)), connector=connector,
+        )
+        self.assertEqual(result, refs)
+        self.assertEqual(connector.execution_count, 0)
+
     def test_duplicate_store_rejects_symlink_paths(self):
         real = self.root / "real-store"; real.mkdir(exist_ok=True)
         link = self.root / "linked-store"

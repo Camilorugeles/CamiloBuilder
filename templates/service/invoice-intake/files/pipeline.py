@@ -18,7 +18,7 @@ def validate_closed_batch(*, configuration, connector, source_id="source.gmail-c
     for reference in configuration["selection"]["pilot_message_refs"]:
         message = connector.read(InputReference(source_id, reference))
         metadata = message.get("metadata", {})
-        supplier_hint = str(metadata.get("from", "unknown")).strip().lower()
+        supplier_hint = str(metadata.get("from") or reference).strip().lower()
         counts[supplier_hint] = counts.get(supplier_hint, 0) + 1
         if counts[supplier_hint] > configuration["selection"]["max_per_supplier"]:
             raise ValueError("Closed batch exceeds the per-supplier limit")
