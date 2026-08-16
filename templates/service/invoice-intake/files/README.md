@@ -14,3 +14,9 @@ reporte nunca contiene bytes, base64url, texto extraído, previews o secretos.
 `operational.build_shadow_batch_summary()` reduce un lote real a contadores,
 estados y códigos saneados. Rechaza registros con acciones propuestas o ejecutadas
 y nunca incluye referencias, texto documental o valores extraídos.
+
+Las métricas reales solo se calculan con `evaluation.load_ground_truth()` y
+`evaluation.evaluate_ground_truth()`. El ground truth debe estar validado por una
+persona, fuera del repositorio, en un archivo regular `0600`; nunca se deriva de
+la extracción evaluada. El informe conserva exclusivamente conteos y ratios, no
+los valores esperados u observados.

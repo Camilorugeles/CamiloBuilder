@@ -34,6 +34,7 @@ class RealPilotOperationTests(unittest.TestCase):
         cls.manifest_connector = importlib.import_module("services.google_connectors.manifest_connector")
         cls.manifest_loader = importlib.import_module("services.google_connectors.pilot_manifest")
         cls.duplicates = importlib.import_module("services.invoice_intake.duplicates")
+        cls.evaluation = importlib.import_module("services.invoice_intake.evaluation")
         cls.operational = importlib.import_module("services.invoice_intake.operational")
         cls.behavior = importlib.import_module("agents.invoice_intake.behavior")
 
@@ -142,6 +143,86 @@ class RealPilotOperationTests(unittest.TestCase):
             self.operational.build_shadow_batch_summary(
                 records=[], expected_attachments=0, audit={"gmail_mutations": -1},
             )
+
+    def test_human_ground_truth_is_external_and_metrics_do_not_leak_values(self):
+        truth = {
+            "format": "camilo-os.invoice-ground-truth", "format_version": 1,
+            "revision": 1, "validated_by_ref": "reviewer:authorized-human",
+            "validated_on": "2026-08-16", "cases": [{
+                "case_id": "REAL-SYNTHETIC-001", "fields": {
+                    "invoice_number": {"evaluable": True, "value": "PRIVATE-001"},
+                    "supplier": {"evaluable": True, "value": "PRIVATE SUPPLIER"},
+                    "concept": {"evaluable": False, "value": None},
+                },
+            }],
+        }
+        path = Path(self.temporary.name).parent / "synthetic-ground-truth.json"
+        path.write_text(json.dumps(truth), encoding="utf-8"); path.chmod(0o600)
+        try:
+            loaded = self.evaluation.load_ground_truth(
+                path, repository_root=self.project,
+            )
+            report = self.evaluation.evaluate_ground_truth(
+                ground_truth=loaded, analyses={"REAL-SYNTHETIC-001": {"fields": {
+                    "invoice_number": {"value": "PRIVATE-001", "status": "extracted"},
+                    "supplier": {"value": None, "status": "unknown"},
+                }}},
+            )
+        finally:
+            path.unlink(missing_ok=True)
+        self.assertEqual(report["total"]["match"], 1)
+        self.assertEqual(report["total"]["mismatch"], 0)
+        self.assertEqual(report["total"]["unknown"], 1)
+        self.assertEqual(report["total"]["coverage"], 0.5)
+        serialized = json.dumps(report, sort_keys=True)
+        self.assertNotIn("PRIVATE", serialized)
+        self.assertNotIn("authorized-human", serialized)
+
+    def test_ground_truth_rejects_repo_files_permissions_and_case_omission(self):
+        document = {
+            "format": "camilo-os.invoice-ground-truth", "format_version": 1,
+            "revision": 1, "validated_by_ref": "reviewer:authorized-human",
+            "validated_on": "2026-08-16", "cases": [{
+                "case_id": "REAL-SYNTHETIC-001",
+                "fields": {"total": {"evaluable": True, "value": "12.10"}},
+            }],
+        }
+        inside = self.project / "ground-truth.json"
+        inside.write_text(json.dumps(document), encoding="utf-8"); inside.chmod(0o600)
+        with self.assertRaisesRegex(self.evaluation.GroundTruthError, "ground-truth-unsafe"):
+            self.evaluation.load_ground_truth(inside, repository_root=self.project)
+        outside = Path(self.temporary.name).parent / "unsafe-ground-truth.json"
+        outside.write_text(json.dumps(document), encoding="utf-8"); outside.chmod(0o644)
+        try:
+            with self.assertRaisesRegex(self.evaluation.GroundTruthError, "ground-truth-unsafe"):
+                self.evaluation.load_ground_truth(outside, repository_root=self.project)
+        finally:
+            outside.unlink(missing_ok=True)
+        with self.assertRaisesRegex(
+            self.evaluation.GroundTruthError, "ground-truth-case-set-mismatch",
+        ):
+            self.evaluation.evaluate_ground_truth(ground_truth=document, analyses={})
+
+    def test_ground_truth_counts_mismatch_and_conflict_without_values(self):
+        truth = {
+            "revision": 2, "cases": [{"case_id": "REAL-SYNTHETIC-001", "fields": {
+                "total": {"evaluable": True, "value": "12.10"},
+                "supplier": {"evaluable": True, "value": "EXPECTED SUPPLIER"},
+            }}],
+        }
+        report = self.evaluation.evaluate_ground_truth(
+            ground_truth=truth, analyses={"REAL-SYNTHETIC-001": {"fields": {
+                "total": {"value": "99.99", "status": "extracted"},
+                "supplier": {"value": None, "status": "conflict"},
+            }}},
+        )
+        self.assertEqual(report["total"]["mismatch"], 1)
+        self.assertEqual(report["total"]["conflict"], 1)
+        self.assertEqual(report["total"]["resolved_precision"], 0.0)
+        serialized = json.dumps(report, sort_keys=True)
+        self.assertNotIn("12.10", serialized)
+        self.assertNotIn("99.99", serialized)
+        self.assertNotIn("EXPECTED SUPPLIER", serialized)
 
 
 if __name__ == "__main__":
