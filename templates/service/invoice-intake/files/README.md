@@ -10,3 +10,7 @@ rechaza. Un destino es siempre una propuesta analítica y nunca una orden de mov
 `integrity.build_integrity_report()` produce la cadena A-E del piloto real usando
 solo referencias opacas, tamaños, hashes, framing y estados de validación. El
 reporte nunca contiene bytes, base64url, texto extraído, previews o secretos.
+
+`operational.build_shadow_batch_summary()` reduce un lote real a contadores,
+estados y códigos saneados. Rechaza registros con acciones propuestas o ejecutadas
+y nunca incluye referencias, texto documental o valores extraídos.

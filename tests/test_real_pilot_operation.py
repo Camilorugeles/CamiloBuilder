@@ -34,6 +34,7 @@ class RealPilotOperationTests(unittest.TestCase):
         cls.manifest_connector = importlib.import_module("services.google_connectors.manifest_connector")
         cls.manifest_loader = importlib.import_module("services.google_connectors.pilot_manifest")
         cls.duplicates = importlib.import_module("services.invoice_intake.duplicates")
+        cls.operational = importlib.import_module("services.invoice_intake.operational")
         cls.behavior = importlib.import_module("agents.invoice_intake.behavior")
 
     @classmethod
@@ -96,6 +97,51 @@ class RealPilotOperationTests(unittest.TestCase):
         serialized = self.runtime.stable_json(record)
         self.assertNotIn(encoded, serialized)
         self.assertNotIn("SYNTHETIC-SECRET", serialized)
+
+    def test_operational_summary_keeps_only_counts_and_sanitized_codes(self):
+        record = {
+            "status": "completed", "proposed_actions": [], "executed_actions": [],
+            "results": [{"kind": "invoice-analysis.v1", "value": {
+                "attachments": [{"reference": "gmail:attachment:private:a1"}],
+                "warnings": [
+                    "attachment-unreadable:gmail:attachment:private:a2",
+                    "PRIVATE DOCUMENT DETAIL",
+                ],
+                "document_status": "needs-review", "review_required": True,
+            }}],
+        }
+        summary = self.operational.build_shadow_batch_summary(
+            records=[record], expected_attachments=2,
+            audit={"authorized_attachment_reads": 2, "gmail_mutations": 0},
+        )
+        self.assertEqual(summary["processed_attachments"], 1)
+        self.assertEqual(summary["abstained_attachments"], 1)
+        self.assertEqual(summary["warning_code_counts"], {
+            "attachment-unreadable": 1, "sanitized-warning": 1,
+        })
+        serialized = json.dumps(summary, sort_keys=True)
+        self.assertNotIn("private", serialized.lower())
+        self.assertNotIn("document detail", serialized.lower())
+
+    def test_operational_summary_rejects_actions_or_invalid_audit(self):
+        record = {
+            "status": "completed", "proposed_actions": [{"action": "write"}],
+            "executed_actions": [], "results": [],
+        }
+        with self.assertRaisesRegex(
+            self.operational.ShadowBatchSummaryError,
+            "shadow-summary-actions-present",
+        ):
+            self.operational.build_shadow_batch_summary(
+                records=[record], expected_attachments=0, audit={},
+            )
+        with self.assertRaisesRegex(
+            self.operational.ShadowBatchSummaryError,
+            "shadow-summary-audit-invalid",
+        ):
+            self.operational.build_shadow_batch_summary(
+                records=[], expected_attachments=0, audit={"gmail_mutations": -1},
+            )
 
 
 if __name__ == "__main__":
